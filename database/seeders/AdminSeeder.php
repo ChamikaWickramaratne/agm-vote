@@ -32,5 +32,14 @@ class AdminSeeder extends Seeder
                 'role' => 'Admin',
             ]
         );
+
+        User::updateOrCreate(
+            ['email' => 'manager@example.com'],
+            [
+                'name' => 'Voting Manager',
+                'password' => Hash::make('ChangeMe!123'),
+                'role' => 'VotingManager',
+            ]
+        );
     }
 }
