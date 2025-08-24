@@ -6,12 +6,19 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\UserApiController;
+use App\Http\Controllers\Admin\MembersApiController;
+use App\Http\Controllers\Admin\ConferencesApiController;
 
 // Livewire
 use App\Livewire\Admin\VotingManagers;
 
 // Middleware class (direct use instead of alias)
 use App\Http\Middleware\EnsureRole;
+use App\Livewire\Admin\MembersPage;
+
+use App\Livewire\Admin\ConferencesIndex;
+use App\Livewire\Admin\ConferencesDetail;
+
 
 /**
  * Landing/dashboard
@@ -85,5 +92,62 @@ Route::middleware([
     ->group(function () {
         Route::get('/voting-managers', VotingManagers::class)->name('voting-managers');
     });
+
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system/api/members')
+    ->name('system.api.members.')
+    ->group(function () {
+        Route::get('/',        [MembersApiController::class, 'index'])->name('index');   // list
+        Route::get('/{member}',[MembersApiController::class, 'show'])->name('show');     // view one
+        Route::post('/',       [MembersApiController::class, 'store'])->name('store');   // create
+        Route::patch('/{member}',[MembersApiController::class, 'update'])->name('update');// update
+        Route::delete('/{member}',[MembersApiController::class, 'destroy'])->name('destroy'); // delete
+    });
+
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system')
+    ->name('system.')
+    ->group(function () {
+        Route::get('/members', MembersPage::class)->name('members'); // new page
+    });
+
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system')
+    ->name('system.')
+    ->group(function () {
+        Route::get('/conferences', ConferencesIndex::class)->name('conferences.index');
+        Route::get('/conferences/{conference}', ConferencesDetail::class)->name('conferences.show');
+    });
+
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system/api/conferences')
+    ->name('system.api.conferences.')
+    ->group(function () {
+        Route::post('/', [ConferencesApiController::class, 'store'])->name('store');
+        Route::patch('/{conference}', [ConferencesApiController::class, 'update'])->name('update');
+        Route::delete('/{conference}', [ConferencesApiController::class, 'destroy'])->name('destroy');
+        Route::get('/', [ConferencesApiController::class, 'index'])->name('index');
+        Route::get('/{conference}', [ConferencesApiController::class, 'show'])->name('show');
+    });
+
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system/api/conferences/{conference}/sessions')
+    ->name('system.api.sessions.')
+    ->group(function () {
+        Route::get('/', [VotingSessionsApiController::class, 'index'])->name('index');
+        Route::get('/{session}', [VotingSessionsApiController::class, 'show'])->name('show');
+    });
+
+// Mutations (adjust roles as you like)
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system/api/conferences/{conference}/sessions')
+    ->name('system.api.sessions.')
+    ->group(function () {
+        Route::post('/', [VotingSessionsApiController::class, 'store'])->name('store');
+        Route::patch('/{session}', [VotingSessionsApiController::class, 'update'])->name('update');
+        Route::delete('/{session}', [VotingSessionsApiController::class, 'destroy'])->name('destroy');
+        Route::patch('/{session}/end', [VotingSessionsApiController::class, 'end'])->name('end');
+    });
+
 
 require __DIR__ . '/auth.php';
