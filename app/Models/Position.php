@@ -1,6 +1,15 @@
-class Position extends Model {
-    protected $fillable = ['name','description','region_id'];
-    public function region(){ return $this->belongsTo(Region::class); }
-    public function candidates(){ return $this->hasMany(Candidate::class); }
-    public function sessions(){ return $this->hasMany(VotingSession::class); }
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+
+class Position extends Model
+{
+    protected $fillable = ['name']; // add other fields you have in your positions table
+
+    public function votingSessions()
+    {
+        return $this->hasMany(VotingSession::class);
+    }
 }

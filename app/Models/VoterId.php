@@ -4,4 +4,5 @@ class VoterId extends Model {
     protected $casts = ['issued_at'=>'datetime','used'=>'boolean','used_at'=>'datetime'];
     public function session(){ return $this->belongsTo(VotingSession::class,'voting_session_id'); }
     public function issuer(){ return $this->belongsTo(User::class,'issued_by'); }
+    public function member(){ return $this->belongsTo(Member::class); } // nullable link
 }
