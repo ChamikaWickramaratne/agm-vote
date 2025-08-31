@@ -26,8 +26,8 @@
             </div>
         </div>
 
-        {{-- End button --}}
-        <div class="mt-4">
+        {{-- Actions --}}
+        <div class="mt-4 flex flex-col sm:flex-row gap-3">
             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                 @if (is_null($conference->end_date))
                     <button wire:click="endConference"
@@ -38,7 +38,22 @@
                     <div class="text-sm text-gray-600">Conference already ended.</div>
                 @endif
             </x-role>
+
+            {{-- Public link for admins to copy/share --}}
+            <x-role :roles="['SuperAdmin','Admin','VotingManager']">
+                <div class="flex items-center space-x-2">
+                    <a href="{{ route('public.conference', $conference->public_token) }}"
+                    target="_blank"
+                    class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                        Public Link
+                    </a>
+                    <span class="text-sm text-gray-500">
+                        Share this link with voters
+                    </span>
+                </div>
+            </x-role>
         </div>
+
     </div>
 
     {{-- Voting Sessions --}}
@@ -89,30 +104,43 @@
 
     {{-- Sessions table --}}
     <div class="overflow-x-auto">
-        <table class="min-w-full text-sm">
-            <thead>
-                <tr class="text-left border-b">
-                    <th class="py-2 pr-4">ID</th>
-                    <th class="py-2 pr-4">Position</th>
-                    <th class="py-2 pr-4">Status</th>
-                    <th class="py-2 pr-4">Start</th>
-                    <th class="py-2 pr-4">End</th>
-                </tr>
-            </thead>
-            <tbody>
-            @forelse($conference->sessions as $s)
-                <tr class="border-b">
-                    <td class="py-2 pr-4">{{ $s->id }}</td>
-                    <td class="py-2 pr-4">{{ optional($s->position)->name ?? '—' }}</td>
-                    <td class="py-2 pr-4">{{ $s->status }}</td>
-                    <td class="py-2 pr-4">{{ optional($s->start_time)->format('Y-m-d H:i') ?? '—' }}</td>
-                    <td class="py-2 pr-4">{{ optional($s->end_time)->format('Y-m-d H:i') ?? '—' }}</td>
-                </tr>
-            @empty
-                <tr><td colspan="5" class="py-4 text-gray-500">No sessions yet.</td></tr>
-            @endforelse
-            </tbody>
-        </table>
+    <table class="min-w-full text-sm">
+        <thead>
+        <tr class="text-left border-b">
+            <th class="py-2 pr-4">ID</th>
+            <th class="py-2 pr-4">Position</th>
+            <th class="py-2 pr-4">Status</th>
+            <th class="py-2 pr-4">Start</th>
+            <th class="py-2 pr-4">End</th>
+            <th class="py-2 pr-4">Actions</th>
+        </tr>
+        </thead>
+        <tbody>
+        @forelse($conference->sessions as $s)
+        <tr class="border-b">
+            <td class="py-2 pr-4">
+            <a class="text-indigo-600 hover:underline"
+                href="{{ route('system.sessions.show', [$conference, $s]) }}">
+                {{ $s->id }}
+            </a>
+            </td>
+            <td class="py-2 pr-4">{{ optional($s->position)->name ?? '—' }}</td>
+            <td class="py-2 pr-4">{{ $s->status }}</td>
+            <td class="py-2 pr-4">{{ optional($s->start_time)->format('Y-m-d H:i') ?? '—' }}</td>
+            <td class="py-2 pr-4">{{ optional($s->end_time)->format('Y-m-d H:i') ?? '—' }}</td>
+            <td class="py-2 pr-4">
+            <a class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                href="{{ route('system.sessions.show', [$conference, $s]) }}">
+                View
+            </a>
+            </td>
+        </tr>
+        @empty
+        <tr><td colspan="6" class="py-4 text-gray-500">No sessions yet.</td></tr>
+        @endforelse
+        </tbody>
+    </table>
     </div>
+
 
 </div>
