@@ -21,10 +21,8 @@
                     <x-application-logo class="w-20 h-20 fill-current text-gray-500" />
                 </a>
             </div>
-
-            <div class="w-full sm:max-w-md mt-6 px-6 py-4 bg-white shadow-md overflow-hidden sm:rounded-lg">
-                {{ $slot }}
-            </div>
+            <div class="w-full sm:max-w-2xl mt-6 px-10 py-8 bg-white shadow-lg overflow-hidden sm:rounded-2xl">
+                {{ $slot }}</div>
         </div>
     </body>
 </html>
