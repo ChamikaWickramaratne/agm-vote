@@ -19,6 +19,12 @@ use App\Livewire\Admin\MembersPage;
 use App\Livewire\Admin\ConferencesIndex;
 use App\Livewire\Admin\ConferencesDetail;
 
+use App\Livewire\Admin\SessionShow;
+use App\Http\Controllers\Admin\VoterIdsApiController;
+use App\Livewire\Public\ConferencePage;
+use App\Livewire\Public\VoteGate;
+use App\Livewire\Public\VotePage;
+
 
 /**
  * Landing/dashboard
@@ -149,5 +155,22 @@ Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'
         Route::patch('/{session}/end', [VotingSessionsApiController::class, 'end'])->name('end');
     });
 
+Route::middleware(['auth', \App\Http\Middleware\EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system')->name('system.')->group(function () {
+        Route::get('/conferences/{conference}/sessions/{session}', SessionShow::class)
+            ->name('sessions.show');
+    });
+
+Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system/api/sessions/{session}/voter-ids')->name('system.api.voterids.')->group(function () {
+        Route::post('/',  [VoterIdsApiController::class,'assign']); // body: { member_id }
+        Route::delete('/',[VoterIdsApiController::class,'unassign']); // body: { member_id }
+    });
+
+Route::middleware('web')->group(function () {
+    Route::get('/c/{token}', ConferencePage::class)->name('public.conference');
+    Route::get('/vote/session/{session}', VoteGate::class)->name('public.vote.gate');
+    Route::get('/vote/session/{session}/ballot', VotePage::class)->name('public.vote.page');
+});
 
 require __DIR__ . '/auth.php';

@@ -31,4 +31,13 @@ class VotingSession extends Model
     {
         return $this->belongsTo(\App\Models\Position::class);
     }
+
+    public function voterIds() { return $this->hasMany(\App\Models\VoterId::class, 'voting_session_id'); }
+
+    public function candidates()
+    {
+        return $this->hasMany(Candidate::class, 'position_id', 'position_id');
+    }
+
+
 }
