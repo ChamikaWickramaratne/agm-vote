@@ -173,4 +173,13 @@ Route::middleware('web')->group(function () {
     Route::get('/vote/session/{session}/ballot', VotePage::class)->name('public.vote.page');
 });
 
+
+
+use App\Http\Controllers\PositionController;
+Route::middleware(['auth'])->group(function () {
+    Route::get('/positions', [PositionController::class, 'index'])->name('positions.index');
+    Route::get('/positions/create', [PositionController::class, 'create'])->name('positions.create');
+    Route::post('/positions', [PositionController::class, 'store'])->name('positions.store');
+});
+
 require __DIR__ . '/auth.php';
