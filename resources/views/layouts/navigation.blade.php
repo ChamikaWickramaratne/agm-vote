@@ -9,12 +9,18 @@
             </div>
 
             <!-- Navigation Links -->
-            <div class="hidden sm:flex sm:space-x-8 sm:ml-10">
-                <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')"
-                    class="text-[#4F200D] hover:text-[#FF9A00] transition duration-300 ease-in-out transform hover:scale-105">
-                    {{ __('Dashboard') }}
-                </x-nav-link>
-            </div>
+<div class="hidden sm:flex sm:space-x-8 sm:ml-10">
+    <x-nav-link :href="route('dashboard')" :active="request()->routeIs('dashboard')"
+        class="text-[#4F200D] hover:text-[#FF9A00] transition duration-300 ease-in-out transform hover:scale-105">
+        {{ __('Dashboard') }}
+    </x-nav-link>
+
+    <!-- New Members Nav Link -->
+    <x-nav-link :href="route('system.members')" :active="request()->routeIs('system.members')"
+        class="text-[#4F200D] hover:text-[#FF9A00] transition duration-300 ease-in-out transform hover:scale-105">
+        {{ __('Members') }}
+    </x-nav-link>
+</div>
 
             <!-- Settings Dropdown -->
             <div class="hidden sm:flex sm:items-center sm:ml-6">
@@ -73,6 +79,12 @@
                 class="text-[#4F200D] hover:text-[#FF9A00] hover:bg-[#FFD93D] transition duration-300">
                 {{ __('Dashboard') }}
             </x-responsive-nav-link>
+
+            <!-- New Members Nav Link -->
+            <x-responsive-nav-link :href="route('system.members')" :active="request()->routeIs('system.members')"
+                class="text-[#4F200D] hover:text-[#FF9A00] hover:bg-[#FFD93D] transition duration-300">
+                {{ __('Members') }}
+            </x-responsive-nav-link>
         </div>
 
         <div class="pt-4 pb-1 border-t border-[#FF9A00]">
@@ -98,4 +110,5 @@
             </div>
         </div>
     </div>
+
 </nav>
