@@ -24,7 +24,7 @@ use App\Http\Controllers\Admin\VoterIdsApiController;
 use App\Livewire\Public\ConferencePage;
 use App\Livewire\Public\VoteGate;
 use App\Livewire\Public\VotePage;
-
+use App\Http\Controllers\Admin\SessionExportController;
 
 /**
  * Landing/dashboard
@@ -172,5 +172,43 @@ Route::middleware('web')->group(function () {
     Route::get('/vote/session/{session}', VoteGate::class)->name('public.vote.gate');
     Route::get('/vote/session/{session}/ballot', VotePage::class)->name('public.vote.page');
 });
+
+
+Route::middleware(['auth', EnsureRole::class.':SuperAdmin,Admin,VotingManager'])
+    ->prefix('system')
+    ->name('system.')
+    ->group(function () {
+        Route::get('/conferences/{conference}/sessions/{session}/export-docx',
+            [SessionExportController::class, 'download']
+        )->name('sessions.export.docx');
+    });
+
+Route::get('/test-docx', function () {
+    \PhpOffice\PhpWord\Settings::setTempDir(storage_path('app/phpword-temp'));
+    $phpWord = new \PhpOffice\PhpWord\PhpWord();
+    $phpWord->addSection()->addText('Hello DOCX');
+    \Storage::disk('local')->makeDirectory('exports');
+    $path = \Storage::path('exports/hello.docx');
+    \PhpOffice\PhpWord\IOFactory::createWriter($phpWord, 'Word2007')->save($path);
+
+    // Validate ZIP
+    $ok = false;
+    if (file_exists($path) && filesize($path) > 800) {
+        $zip = new ZipArchive();
+        $ok = ($zip->open($path) === true);
+        $zip->close();
+    }
+    if (!$ok) abort(500, 'DOCX not valid—check zip extension & temp dir perms.');
+
+    while (ob_get_level()) ob_end_clean();
+    return response()->file($path, [
+        'Content-Type'        => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'Content-Disposition' => 'attachment; filename="hello.docx"',
+        'Content-Length'      => (string) filesize($path),
+        'Cache-Control'       => 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma'              => 'no-cache',
+    ]);
+});
+
 
 require __DIR__ . '/auth.php';

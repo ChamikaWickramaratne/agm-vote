@@ -45,6 +45,10 @@
                     </button>
                 @endif
             </x-role>
+            <a href="{{ route('system.sessions.export.docx', [$conference, $session]) }}"
+                class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700">
+                    Export .DOCX
+            </a>
             <a href="{{ route('system.conferences.show', $conference) }}"
                class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">Back to Conference</a>
         </div>
