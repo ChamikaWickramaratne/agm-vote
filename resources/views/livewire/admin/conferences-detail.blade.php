@@ -56,6 +56,43 @@
 
     </div>
 
+{{-- QR code card --}}
+<div 
+    x-data="{ open:false }"
+    class="bg-white shadow sm:rounded-lg p-6 mt-6 flex flex-col items-center">
+
+    <h3 class="font-semibold mb-3">QR Code for Voters</h3>
+
+    {{-- Clickable QR preview --}}
+    <div class="cursor-pointer" @click="open = true">
+        {!! QrCode::format('svg')->size(200)->margin(1)
+            ->generate(route('public.conference', $conference->public_token)) !!}
+    </div>
+    <div class="text-xs text-gray-500 mt-2">
+        Click QR to enlarge
+    </div>
+
+    {{-- Fullscreen modal --}}
+    <div x-show="open"
+         x-transition
+         class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+         @click.self="open = false">
+
+        <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl w-full flex flex-col items-center">
+            <h3 class="font-semibold mb-3">Conference QR Code</h3>
+            <div>
+                {!! QrCode::format('svg')->size(500)->margin(1)
+                    ->generate(route('public.conference', $conference->public_token)) !!}
+            </div>
+            <button @click="open = false"
+                    class="mt-4 px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+
     {{-- Voting Sessions --}}
 <div class="bg-white shadow sm:rounded-lg p-6 space-y-6">
     <h3 class="font-semibold">Voting Sessions</h3>
