@@ -8,6 +8,8 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\UserApiController;
 use App\Http\Controllers\Admin\MembersApiController;
 use App\Http\Controllers\Admin\ConferencesApiController;
+use App\Http\Controllers\MemberController;
+
 
 // Livewire
 use App\Livewire\Admin\VotingManagers;
@@ -32,6 +34,8 @@ use App\Http\Controllers\Admin\SessionExportController;
 Route::get('/', [DashboardController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('dashboard');
+Route::resource('members', MemberController::class);
+
 
 /**
  * Profile (authenticated users)
