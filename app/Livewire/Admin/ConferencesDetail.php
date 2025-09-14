@@ -19,6 +19,15 @@ class ConferencesDetail extends Component
     public ?string $session_starts_at = null;
     public ?string $close_condition = 'Manual'; // optional
     public array $voting_rules = [];            // optional
+    // Add a public property
+    public ?int $close_after_minutes = null;
+
+    public bool $showPositionModal = false;
+    public string $newPositionName = '';
+    public ?string $newPositionDescription = null;
+    public ?int $newPositionRegionId = null;
+
+    public ?float $majority_percent = 50.00;
 
     public function mount(Conference $conference): void
     {
@@ -37,33 +46,78 @@ class ConferencesDetail extends Component
         $this->conference->refresh();
     }
 
+    public function handlePositionChange(string $value): void
+    {
+        if ($value === '__new') {
+            $this->position_id = null;
+            $this->openPositionModal();
+            return;
+        }
+
+        $this->position_id = (int) $value ?: null;
+    }
+
+    public function openPositionModal(): void
+    {
+        $this->resetValidation();
+        $this->newPositionName = '';
+        $this->newPositionDescription = null;
+        $this->newPositionRegionId = null;
+        $this->showPositionModal = true;
+    }
+
+    public function saveNewPosition(): void
+    {
+        $this->validate([
+            'newPositionName' => ['required','string','max:255'],
+            'newPositionDescription' => ['nullable','string'],
+            'newPositionRegionId' => ['nullable','integer','exists:regions,id'],
+        ]);
+
+        $pos = Position::create([
+            'name'        => $this->newPositionName,
+            'description' => $this->newPositionDescription,
+            'region_id'   => $this->newPositionRegionId,
+        ]);
+
+        // auto-select the newly created position for the form
+        $this->position_id = $pos->id;
+        $this->showPositionModal = false;
+
+        session()->flash('ok', 'Position "'.$pos->name.'" created and selected.');
+    }
+
     public function createSession(): void
     {
         $role = optional(auth()->user())->role;
-        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) {
-            abort(403);
-        }
+        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
         if ($this->conference->end_date) {
             $this->addError('position_id', 'Conference has already ended.');
             return;
         }
 
         $this->validate([
-            'position_id'       => ['required','integer','exists:positions,id'],
-            'session_starts_at' => ['nullable','date'],
-            'close_condition'    => ['nullable','in:Manual,Timer,AllVotesCast'],
-            // voting_rules is optional array; keep it empty for now if no UI
+            'position_id'         => ['required','integer','exists:positions,id'],
+            'session_starts_at'   => ['nullable','date'],
+            'close_condition'     => ['nullable','in:Manual,Timer,AllVotesCast'],
+            'close_after_minutes' => [$this->close_condition === 'Timer' ? 'required' : 'nullable','integer','min:1','max:1440'],
+            // NEW: add validation rule for the property you’re saving
+            'majority_percent'    => ['required','numeric','min:0','max:100'],
         ]);
 
         $session = $this->conference->sessions()->create([
-            'position_id'     => $this->position_id,
-            'start_time'      => $this->session_starts_at ?: null,
-            'status'          => 'Pending',
-            'close_condition' => $this->close_condition ?? 'Manual',
-            'voting_rules'    => $this->voting_rules ?: null,
+            'position_id'         => $this->position_id,
+            'start_time'          => $this->session_starts_at ?: null,
+            'status'              => 'Pending',
+            'close_condition'     => $this->close_condition ?? 'Manual',
+            'close_after_minutes' => $this->close_after_minutes ?? null,
+            'voting_rules'        => $this->voting_rules ?: null,
+            'majority_percent'    => $this->majority_percent,
         ]);
 
-        $this->reset(['position_id','session_starts_at','close_condition','voting_rules']);
+        // reset form
+        $this->reset(['position_id','session_starts_at','close_condition','close_after_minutes','voting_rules','majority_percent']);
+        $this->majority_percent = 50.00; // keep default for next create
         session()->flash('ok', 'Voting session #'.$session->id.' created.');
         $this->conference->refresh();
     }
@@ -74,5 +128,29 @@ class ConferencesDetail extends Component
         $positions = Position::orderBy('name')->get(['id','name']);
 
         return view('livewire.admin.conferences-detail', compact('positions'));
+    }
+
+    public function reuseSession(int $sessionId): void
+    {
+        $role = optional(auth()->user())->role;
+        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) {
+            abort(403);
+        }
+
+        // Ensure the session belongs to this conference
+        $original = \App\Models\VotingSession::where('conference_id', $this->conference->id)
+            ->findOrFail($sessionId);
+
+        // Duplicate with same settings; reset timing/status
+        $new = $original->replicate();
+        $new->status = 'Pending';
+        $new->start_time = null;
+        $new->end_time = null;
+        $new->created_at = now();
+        $new->updated_at = now();
+        $new->save();
+
+        session()->flash('ok', 'Voting session #'.$original->id.' reused as #'.$new->id.'.');
+        $this->conference->refresh();
     }
 }

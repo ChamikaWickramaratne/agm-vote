@@ -65,4 +65,9 @@ class Kernel extends HttpKernel
         'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
         'role' => \App\Http\Middleware\EnsureRole::class,
     ];
+
+    protected function schedule(\Illuminate\Console\Scheduling\Schedule $schedule): void
+    {
+        $schedule->command('sessions:close-timed')->everyMinute();
+    }
 }

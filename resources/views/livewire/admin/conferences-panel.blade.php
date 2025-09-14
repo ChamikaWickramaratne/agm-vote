@@ -1,11 +1,4 @@
-<x-slot name="header">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight">
-        Conferences
-    </h2>
-</x-slot>
-
-<div class="py-8 max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
-
+<div class="space-y-6">
     @if (session('ok'))
         <div class="p-3 rounded bg-green-100 text-green-800">{{ session('ok') }}</div>
     @endif

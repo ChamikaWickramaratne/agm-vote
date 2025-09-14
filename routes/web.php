@@ -121,7 +121,6 @@ Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'
     ->prefix('system')
     ->name('system.')
     ->group(function () {
-        Route::get('/conferences', ConferencesIndex::class)->name('conferences.index');
         Route::get('/conferences/{conference}', ConferencesDetail::class)->name('conferences.show');
     });
 

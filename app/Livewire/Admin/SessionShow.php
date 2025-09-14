@@ -2,11 +2,11 @@
 
 namespace App\Livewire\Admin;
 
+use App\Models\Candidate;
 use App\Models\Conference;
 use App\Models\Member;
 use App\Models\VotingSession;
 use App\Models\VoterId;
-use App\Models\Candidate;
 use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
@@ -20,30 +20,40 @@ class SessionShow extends Component
     public Conference $conference;
     public VotingSession $session;
 
-    /** Candidates & votes panel */
-    public array $candidatesWithVotes = [];
-    public array $winner = ['max' => 0, 'ids' => []];
-    public array $candidateMemberIds = [];
+    /** Candidates & votes (display) */
+    public array $candidatesWithVotes = [];     // [ ['id','name','member_id','votes_count','percent'], ... ]
+    public array $candidateMemberIds  = [];     // member_ids already candidates for the session position
 
-    /** Members assignment panel */
-    public array $assigned = [];   // [member_id => voter_id]
-    public array $justIssued = []; // [member_id => plaintext_code]
+    /** Plurality snapshot (kept for compatibility) */
+    public array $winner = ['max' => 0, 'ids' => []]; // highest vote count & candidate ids with that count
 
-    /** Paginator page name for members table */
+    /** Majority snapshot */
+    public int   $totalVotes       = 0;          // total ballots in THIS session
+    public float $thresholdPercent = 50.0;       // session-configured majority threshold (e.g., 50.00)
+    public float $thresholdVotes   = 0.0;        // computed minimum votes needed to reach majority
+    public bool  $hasMajority      = false;      // did someone reach >= threshold?
+    public float $majorityPercent  = 0.0;        // best percent among majority winners (for display)
+    public array $majorityWinners  = [];         // candidate ids that met threshold
+
+    /** Members assignment (issue/revoke codes) */
+    public array $assigned  = [];   // [member_id => voter_id]
+    public array $justIssued = [];  // [member_id => plaintext_code] shown once
+
+    /** Paginator name for members table */
     protected string $pageName = 'membersPage';
 
-    /** Select value for “Add Candidate” */
+    /** Select value for “Add Candidate from Members” */
     public ?int $pickMemberId = null;
 
     public function mount(Conference $conference, VotingSession $session): void
     {
-        // Ensure the session belongs to the given conference
+        // Ensure the session belongs to this conference
         abort_unless($session->conference_id === $conference->id, 404);
         $this->conference = $conference;
         $this->session    = $session->load('position');
     }
 
-    /** If the members paginator changes, clear ephemeral codes */
+    /** Clear one-time codes when paging members */
     public function updatedMembersPage(): void
     {
         $this->reset('justIssued');
@@ -82,13 +92,13 @@ class SessionShow extends Component
         $this->session->refresh();
     }
 
-    /** Assign / unassign a member to this voting session (issue/revoke code) */
+    /** Assign / unassign a member to this session (issue / revoke code) */
     public function toggleMember(int $memberId, bool $checked): void
     {
         $role = optional(auth()->user())->role;
         if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
 
-        // Optional guard: block after conference ended
+        // Optional guard: disallow after conference has ended
         if ($this->conference->end_date) {
             $this->addError('members', 'Conference has ended.');
             return;
@@ -139,14 +149,14 @@ class SessionShow extends Component
 
         $this->addCandidateFromMember($memberId);
 
-        // Rebuild the candidates panel so the dropdown updates immediately
+        // Refresh candidate panel immediately so the dropdown updates
         $this->rebuildCandidatesPanel();
 
         // Reset the select
         $this->pickMemberId = null;
     }
 
-    /** Core add-candidate logic from a member id */
+    /** Core add-candidate logic */
     public function addCandidateFromMember(int $memberId): void
     {
         $role = optional(auth()->user())->role;
@@ -175,14 +185,17 @@ class SessionShow extends Component
         Candidate::create([
             'position_id' => $this->session->position_id,
             'member_id'   => $member->id,
-            'name'        => $member->name, // optional (display is via related member)
+            'name'        => $member->name, // optional (display primarily uses related member)
         ]);
 
         $this->session->refresh();
         session()->flash('ok', 'Candidate added.');
     }
 
-    /** Build candidates+votes list and winner data; also derive candidateMemberIds */
+    /**
+     * Build the candidates + votes + (plurality & majority) snapshots
+     * and derive $candidateMemberIds for "not-yet-candidate" dropdown.
+     */
     protected function rebuildCandidatesPanel(): void
     {
         $posId = $this->session->position_id;
@@ -190,7 +203,13 @@ class SessionShow extends Component
         if (! $posId) {
             $this->candidatesWithVotes = [];
             $this->candidateMemberIds  = [];
-            $this->winner = ['max' => 0, 'ids' => []];
+            $this->winner              = ['max' => 0, 'ids' => []];
+            $this->totalVotes          = 0;
+            $this->thresholdPercent    = (float) ($this->session->majority_percent ?? 50.0);
+            $this->thresholdVotes      = 0.0;
+            $this->hasMajority         = false;
+            $this->majorityPercent     = 0.0;
+            $this->majorityWinners     = [];
             return;
         }
 
@@ -204,27 +223,60 @@ class SessionShow extends Component
             ->orderBy('id')
             ->get();
 
-        $this->candidatesWithVotes = $cands->map(fn($c) => [
-            'id'          => $c->id,
-            'name'        => $c->member->name ?? ($c->name ?? ('Candidate #'.$c->id)),
-            'votes_count' => (int) $c->votes_count,
-            'member_id'   => $c->member_id,
-        ])->all();
+        $this->totalVotes = (int) $cands->sum('votes_count');
 
+        $this->thresholdPercent = (float) ($this->session->majority_percent ?? 50.0);
+        $this->thresholdVotes   = $this->totalVotes > 0
+            ? ($this->thresholdPercent / 100.0) * $this->totalVotes
+            : 0.0;
+
+        $rows = [];
+        foreach ($cands as $c) {
+            $name = $c->member->name ?? ($c->name ?? ('Candidate #'.$c->id));
+            $votes = (int) $c->votes_count;
+            $percent = $this->totalVotes > 0 ? round(($votes / $this->totalVotes) * 100, 2) : 0.0;
+
+            $rows[] = [
+                'id'          => $c->id,
+                'name'        => $name,
+                'member_id'   => $c->member_id,
+                'votes_count' => $votes,
+                'percent'     => $percent,
+            ];
+        }
+        $this->candidatesWithVotes = $rows;
+
+        // track which member ids are already candidates
         $this->candidateMemberIds = $cands->pluck('member_id')->filter()->values()->all();
 
-        if ($this->session->status === 'Closed' || $this->session->end_time !== null) {
-            $max = (int) ($cands->max('votes_count') ?? 0);
-            $ids = $max > 0 ? $cands->where('votes_count', $max)->pluck('id')->all() : [];
-            $this->winner = ['max' => $max, 'ids' => $ids];
-        } else {
-            $this->winner = ['max' => 0, 'ids' => []];
+        // plurality (highest votes)
+        $maxVotes = $cands->max('votes_count') ?? 0;
+        $this->winner = [
+            'max' => (int) $maxVotes,
+            'ids' => $maxVotes > 0
+                ? $cands->where('votes_count', $maxVotes)->pluck('id')->all()
+                : [],
+        ];
+
+        // majority: anyone >= thresholdVotes?
+        $this->hasMajority     = false;
+        $this->majorityPercent = 0.0;
+        $this->majorityWinners = [];
+
+        if ($this->totalVotes > 0) {
+            foreach ($this->candidatesWithVotes as $row) {
+                if ($row['votes_count'] >= $this->thresholdVotes) {
+                    $this->hasMajority = true;
+                    $this->majorityWinners[] = $row['id'];
+                    $this->majorityPercent = max($this->majorityPercent, (float) $row['percent']);
+                }
+            }
         }
     }
 
     protected function generateCode(int $len = 6): string
     {
-        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O or 1/I
+        $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
         $out = '';
         for ($i = 0; $i < $len; $i++) {
             $out .= $alphabet[random_int(0, strlen($alphabet) - 1)];
@@ -234,7 +286,7 @@ class SessionShow extends Component
 
     public function render()
     {
-        // Keep candidates block in sync on every render
+        // Keep candidates snapshot in sync every render
         $this->rebuildCandidatesPanel();
 
         // Members table (paginated)
@@ -246,15 +298,15 @@ class SessionShow extends Component
             ->pluck('id', 'member_id')
             ->all();
 
-        // Build the dropdown options = all members NOT already candidates
-        $availableMembers = \App\Models\Member::query()
+        // For the "Add Candidate" select: all members NOT already candidates
+        $availableMembers = Member::query()
             ->when(!empty($this->candidateMemberIds), fn($q) => $q->whereNotIn('id', $this->candidateMemberIds))
             ->orderBy('name')
             ->get();
 
         return view('livewire.admin.session-show', [
-            'members'           => $members,           // paginator for the table
-            'availableMembers'  => $availableMembers,  // clean list for the select
+            'members'          => $members,
+            'availableMembers' => $availableMembers,
         ]);
     }
 }

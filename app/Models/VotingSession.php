@@ -14,6 +14,8 @@ class VotingSession extends Model
         'start_time',
         'end_time',
         'close_condition',
+        'close_after_minutes',
+        'majority_percent',
     ];
 
     protected $casts = [
