@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
+use Illuminate\Support\Facades\DB;
 
 #[Layout('layouts.app')]
 class SessionShow extends Component
@@ -63,16 +64,32 @@ class SessionShow extends Component
     public function openSession(): void
     {
         $role = optional(auth()->user())->role;
-        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
+            if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
+                DB::transaction(function () {
+            // Lock all sessions in this conference to avoid races
+            VotingSession::where('conference_id', $this->conference->id)->lockForUpdate()->get();
 
-        if ($this->session->status !== 'Open') {
-            $this->session->update([
-                'status'     => 'Open',
-                'start_time' => $this->session->start_time ?? now(),
-                'end_time'   => null,
-            ]);
-            session()->flash('ok', 'Session opened.');
-        }
+            // Is there another open session in this conference?
+            $otherOpen = VotingSession::where('conference_id', $this->conference->id)
+                ->where('id', '!=', $this->session->id)
+                ->where('status', 'Open')
+                ->whereNull('end_time')
+                ->exists();
+
+            if ($otherOpen) {
+                $this->addError('session', 'Another session in this conference is already open. Close it before opening a new one.');
+                return;
+            }
+
+            if ($this->session->status !== 'Open') {
+                $this->session->update([
+                    'status'     => 'Open',
+                    'start_time' => $this->session->start_time ?? now(),
+                    'end_time'   => null,
+                ]);
+                session()->flash('ok', 'Session opened.');
+            }
+        });
         $this->session->refresh();
     }
 

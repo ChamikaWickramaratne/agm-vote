@@ -5,7 +5,7 @@
 </x-slot>
 
 {{-- Auto-refresh this page every 10s (pauses in background tabs) --}}
-<div wire:poll.keep-alive.10s="refreshData"
+<div wire:poll.keep-alive.5s="refreshData"
      class="py-8 max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
     <div class="bg-white shadow sm:rounded-lg p-6">
         <div class="grid sm:grid-cols-2 gap-4">

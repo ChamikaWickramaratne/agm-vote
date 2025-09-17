@@ -9,6 +9,12 @@
         <div class="p-3 rounded bg-green-100 text-green-800">{{ session('ok') }}</div>
     @endif
 
+    @if ($errors->has('session_open'))
+        <div class="p-3 rounded bg-red-100 text-red-800">
+            {{ $errors->first('session_open') }}
+        </div>
+    @endif
+
     {{-- Session info --}}
     <div class="bg-white shadow sm:rounded-lg p-6 space-y-4">
         <div class="grid sm:grid-cols-2 gap-4">
