@@ -10,6 +10,7 @@ use App\Models\VoterId;
 use Illuminate\Support\Facades\DB;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
+use Illuminate\Support\Carbon;
 
 #[Layout('layouts.public')]
 class VotePage extends Component
@@ -21,6 +22,9 @@ class VotePage extends Component
 
     /** Radio: chosen candidate id */
     public ?int $choiceId = null;
+    public ?int $remaining_seconds = null;
+
+    public ?string $customCandidateName = null;
 
     public function mount(VotingSession $session): void
     {
@@ -34,6 +38,17 @@ class VotePage extends Component
         abort_if(optional($session->conference)->end_date !== null, 404);
 
         $this->session = $session;
+        if (
+            $session->close_condition === 'Timer'
+            && $session->start_time
+            && !$session->end_time
+            && $session->close_after_minutes
+        ) {
+            $deadline = Carbon::parse($session->start_time)->addMinutes($session->close_after_minutes);
+            $this->remaining_seconds = max(0, now()->diffInSeconds($deadline, false));
+        } else {
+            $this->remaining_seconds = null;
+        }
     }
 
     /**
@@ -111,6 +126,17 @@ class VotePage extends Component
                 ->where('position_id', $this->session->position_id)
                 ->firstOrFail();
 
+            if (
+                $this->session->close_condition === 'Timer'
+                && $this->session->start_time
+                && $this->session->close_after_minutes
+            ) {
+                $deadline = Carbon::parse($this->session->start_time)->addMinutes($this->session->close_after_minutes);
+                if (now()->gte($deadline)) {
+                    $this->addError('choiceId', 'This voting session has closed.');
+                    return;
+                }
+            }
             DB::transaction(function () use ($voter, $candidate) {
                 Ballot::create([
                     'voting_session_id' => $this->session->id,
@@ -162,15 +188,53 @@ class VotePage extends Component
         return view('livewire.public.vote-page', compact('candidates','availableMembers'));
     }
     public function onPickChanged($value): void
-{
-    // Cast to int or null
-    $this->pickMemberId = $value !== '' ? (int) $value : null;
-    \Log::info('onPickChanged', ['value' => $value, 'pickMemberId' => $this->pickMemberId]);
-}
+    {
+        // Cast to int or null
+        $this->pickMemberId = $value !== '' ? (int) $value : null;
+        \Log::info('onPickChanged', ['value' => $value, 'pickMemberId' => $this->pickMemberId]);
+    }
 
-public function updatedPickMemberId($value): void
-{
-    \Log::info('updatedPickMemberId', ['value' => $value]);
-}
+    public function updatedPickMemberId($value): void
+    {
+        \Log::info('updatedPickMemberId', ['value' => $value]);
+    }
+    public function addCustomCandidate(): void
+    {
+        if (!$this->session->position_id) {
+            $this->addError('customCandidateName', 'This session has no position assigned.');
+            return;
+        }
+
+        // Validate basic constraints
+        $this->validate([
+            'customCandidateName' => ['required', 'string', 'max:255'],
+        ]);
+
+        // Normalize/guard against whitespace-only names
+        $name = trim((string) $this->customCandidateName);
+        if ($name === '') {
+            $this->addError('customCandidateName', 'Please enter a candidate name.');
+            return;
+        }
+
+        try {
+            // Prevent duplicate write-ins for this position
+            $candidate = Candidate::firstOrCreate(
+                ['position_id' => $this->session->position_id, 'name' => $name, 'member_id' => null],
+                [] // nothing extra; keys above are enough
+            );
+
+            $this->customCandidateName = null;
+            $this->choiceId = $candidate->id; // preselect
+            session()->flash('ok', 'Custom candidate added.');
+            \Log::info('Custom candidate added', [
+                'position_id' => $this->session->position_id,
+                'candidate_id'=> $candidate->id,
+            ]);
+        } catch (\Throwable $e) {
+            \Log::error('addCustomCandidate failed', ['error' => $e->getMessage()]);
+            $this->addError('customCandidateName', 'Could not add candidate (see logs).');
+        }
+    }
 
 }

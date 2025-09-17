@@ -13,15 +13,20 @@ class ConferencePage extends Component
 
     public function mount(string $token): void
     {
-        // Find conference by token, ensure it's active
         $conf = Conference::active()->where('public_token', $token)->first();
         abort_unless($conf, 404);
         $this->conference = $conf->load(['sessions.position']);
     }
 
+    // called by wire:poll to pull fresh DB state
+    public function refreshData(): void
+    {
+        $this->conference->refresh();
+        $this->conference->load(['sessions.position']);
+    }
+
     public function render()
     {
-        // Show only "active" sessions; your schema uses status Open/Pending/Closed.
         $openSessions = $this->conference->sessions
             ->where('status', 'Open')
             ->values();

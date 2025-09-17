@@ -117,6 +117,13 @@
 
             @if ($session->status === 'Closed')
                 <div class="mt-3">
+                    @php
+                        // format like 50 or 50.5 or 50.25 (no trailing zeros)
+                        $maj = $session->majority_percent;
+                        $majFmt = is_null($maj) ? '—'
+                            : rtrim(rtrim(number_format((float)$maj, 2, '.', ''), '0'), '.');
+                    @endphp
+
                     @if ($winner['max'] > 0 && !empty($winner['ids']))
                         <div class="inline-block px-3 py-1 rounded bg-green-100 text-green-800">
                             Winner{{ count($winner['ids']) > 1 ? 's' : '' }}:
@@ -129,6 +136,9 @@
                                 }}
                             </span>
                             ({{ $winner['max'] }} vote{{ $winner['max'] === 1 ? '' : 's' }})
+                            <span class="ml-2 text-green-700/80">
+                                • Majority threshold: <span class="font-semibold">{{ $majFmt }}%</span>
+                            </span>
                         </div>
                     @else
                         <div class="text-sm text-gray-500">No votes cast.</div>

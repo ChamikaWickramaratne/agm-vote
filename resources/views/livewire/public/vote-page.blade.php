@@ -10,6 +10,58 @@
     @endif
 
     <div class="bg-white shadow sm:rounded-lg p-6 space-y-6">
+        {{-- TIMER BANNER --}}
+        @if ($session->close_condition === 'Timer' && !is_null($remaining_seconds))
+            <div
+                x-data="countdown({{ $remaining_seconds }})"
+                x-init="start()"
+                class="mb-4 p-3 rounded border bg-yellow-50 text-yellow-900 flex items-center justify-between"
+            >
+                <div>
+                    <div class="text-sm font-medium">Time remaining</div>
+                    <div class="text-2xl font-semibold tabular-nums" x-text="formatted"></div>
+                </div>
+                <template x-if="done">
+                    <div class="text-red-600 text-sm">Session closing…</div>
+                </template>
+            </div>
+
+            <script>
+                function countdown(initial) {
+                    return {
+                        remaining: initial,
+                        formatted: '',
+                        done: initial <= 0,
+                        start() {
+                            this.format();
+                            if (this.done) return;
+                            setInterval(() => {
+                                if (this.remaining > 0) {
+                                    this.remaining--;
+                                    this.format();
+                                    if (this.remaining <= 0) this.done = true;
+                                }
+                            }, 1000);
+                        },
+                        format() {
+                            const s = Math.max(0, this.remaining);
+                            const h = Math.floor(s / 3600);
+                            const m = Math.floor((s % 3600) / 60);
+                            const sec = s % 60;
+                            this.formatted =
+                                String(h).padStart(2, '0') + ':' +
+                                String(m).padStart(2, '0') + ':' +
+                                String(sec).padStart(2, '0');
+                        }
+                    }
+                }
+            </script>
+        @else
+    {{-- quick one-line debug you can remove later --}}
+    <div class="text-xs text-gray-400">
+        timer?: cc={{ $session->close_condition }}; minutes={{ $session->close_after_minutes ?? 'null' }}; start={{ $session->start_time ?? 'null' }}
+    </div>
+        @endif
 
         {{-- Session info --}}
         <div class="grid sm:grid-cols-2 gap-4">
@@ -43,6 +95,18 @@
 
             </div>
             @error('pickMemberId') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+
+            <div class="flex items-center gap-2">
+                <input type="text" wire:model.live="customCandidateName"
+                    placeholder="Enter custom candidate name"
+                    class="border rounded p-2 w-full">
+                <button type="button" wire:click="addCustomCandidate"
+                    class="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                    x-bind:disabled="!$wire.customCandidateName">
+                Add
+            </button>
+            </div>
+        @error('customCandidateName') <div class="text-sm text-red-600">{{ $message }}</div> @enderror
         </div>
 
         {{-- Current candidates with radio (single choice) --}}
