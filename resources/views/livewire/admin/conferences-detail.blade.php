@@ -68,7 +68,14 @@
         <div class="text-xs text-gray-500 mt-2">
             Click QR to enlarge
         </div>
-
+        <div class="mt-3 flex items-center gap-2">
+            <a
+                href="{{ route('admin.conferences.qr.download', ['conference' => $conference->id, 'format' => 'svg']) }}"
+                class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300"
+            >
+                Download SVG
+            </a>
+        </div>
         {{-- Fullscreen modal --}}
         <div x-show="open"
              x-transition

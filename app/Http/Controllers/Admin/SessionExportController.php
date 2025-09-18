@@ -129,12 +129,46 @@ class SessionExportController extends Controller
             $table->addCell(2000)->addText((string) ($c->votes_count ?? 0));
         }
 
-
         if (!empty($winnerNames)) {
             $section->addTextBreak(1);
             $section->addText('Winner(s): '.$clean(implode(', ', $winnerNames)), ['bold' => true]);
         }
 
+        if ($session->status === 'Closed' || !is_null($session->end_time)) {
+            // Prepare labels & values
+            $labels = $candidates->map(function ($c) {
+                return $c->member->name ?? ($c->name ?? "Candidate #{$c->id}");
+            })->all();
+
+            $values = $candidates->map(fn ($c) => (int)($c->votes_count ?? 0))->all();
+
+            // Add a heading
+            $section->addTextBreak(1);
+            $section->addText('Charts', $hStyle);
+
+            // Bar/Column chart: Votes per candidate
+            $section->addText('Votes per Candidate', ['bold' => true]);
+            $section->addChart('column', $labels, $values, [
+                // Use PhpOffice\PhpWord\Shared\Converter for sizing
+                'width'              => Converter::inchToEmu(6.5),
+                'height'             => Converter::inchToEmu(3.2),
+                'title'              => 'Votes per Candidate',
+                'showLegend'         => false,
+                'gridY'              => true,
+                'categoryAxisTitle'  => 'Candidates',
+                'valueAxisTitle'     => 'Votes',
+            ]);
+
+            // Pie chart: Share of votes
+            $section->addTextBreak(1);
+            $section->addText('Vote Share', ['bold' => true]);
+            $section->addChart('pie', $labels, $values, [
+                'width'      => Converter::inchToEmu(4.8),
+                'height'     => Converter::inchToEmu(4.8),
+                'title'      => 'Vote Share',
+                'showLegend' => true,
+            ]);
+        }
         // 4) Write to disk in exports/
         \Storage::disk('local')->makeDirectory('exports');
         $fullPath = \Storage::path("exports/session_{$conference->id}_{$session->id}.docx");

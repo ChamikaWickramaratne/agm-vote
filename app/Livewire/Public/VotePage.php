@@ -115,12 +115,6 @@ class VotePage extends Component
 
             $voter = VoterId::findOrFail($voterRowId);
 
-            if ($voter->used) {
-                \Log::warning('castVote: code already used', ['voter_id' => $voter->id]);
-                $this->addError('choiceId', 'This code has already been used.');
-                return;
-            }
-
             // Ensure candidate belongs to this session's position
             $candidate = Candidate::where('id', $this->choiceId)
                 ->where('position_id', $this->session->position_id)
@@ -145,8 +139,6 @@ class VotePage extends Component
                     'jti_hash'          => null,
                     'cast_at'           => now(),
                 ]);
-
-                $voter->update(['used' => true, 'used_at' => now()]);
             });
 
             \Log::info('castVote success', [

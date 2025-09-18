@@ -13,7 +13,7 @@ class ConferencePage extends Component
 
     public function mount(string $token): void
     {
-        $conf = Conference::active()->where('public_token', $token)->first();
+        $conf = Conference::where('public_token', $token)->first();
         abort_unless($conf, 404);
         $this->conference = $conf->load(['sessions.position']);
     }

@@ -25,6 +25,7 @@ use App\Livewire\Public\ConferencePage;
 use App\Livewire\Public\VoteGate;
 use App\Livewire\Public\VotePage;
 use App\Http\Controllers\Admin\SessionExportController;
+use App\Http\Controllers\Admin\ConferenceQrController;
 
 /**
  * Landing/dashboard
@@ -208,6 +209,10 @@ Route::get('/test-docx', function () {
         'Pragma'              => 'no-cache',
     ]);
 });
+
+Route::middleware(['auth']) // add any role/guard middleware you already use
+    ->get('/admin/conferences/{conference}/qr', [ConferenceQrController::class, 'download'])
+    ->name('admin.conferences.qr.download');
 
 
 require __DIR__ . '/auth.php';
