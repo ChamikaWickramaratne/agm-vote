@@ -118,35 +118,72 @@
             @else
                 <ul class="space-y-2">
                     @foreach($candidates as $c)
-                        <li class="flex items-center justify-between border rounded p-2">
-                            <label for="cand-{{ $c->id }}" class="flex items-center gap-3 flex-1">
-                            <input
-                                id="cand-{{ $c->id }}"
-                                type="radio"
-                                name="choiceId"
-                                wire:model.defer="choiceId"   {{-- ← was .live; now .defer --}}
-                                value="{{ $c->id }}"
-                            >
-                            <div>
-                                @if($c->member)
-                                <div class="font-medium">{{ $c->member->name }}</div>
-                                @if($c->member->email)
-                                    <div class="text-xs text-gray-500">{{ $c->member->email }}</div>
-                                @endif
-                                @else
-                                <div class="font-medium">{{ $c->name ?? ('Candidate #'.$c->id) }}</div>
-                                @endif
-                                <div class="text-xs text-gray-400">ID: {{ $c->id }}</div>
-                            </div>
+                        <li class="flex items-center justify-between border rounded p-2" wire:key="cand-{{ $c->id }}">
+                            <label for="cand-{{ $c->id }}" class="flex items-center gap-3 flex-1 cursor-pointer">
+                                <input
+                                    id="cand-{{ $c->id }}"
+                                    type="radio"
+                                    name="choiceId"
+                                    wire:model.live="choiceId"  {{-- update immediately on click --}}
+                                    value="{{ $c->id }}"
+                                    class="mt-0.5"
+                                >
+                                <div>
+                                    @if ($c->member)
+                                        <div class="font-medium">{{ $c->member->name }}</div>
+                                        @if ($c->member->email)
+                                            <div class="text-xs text-gray-500">{{ $c->member->email }}</div>
+                                        @endif
+                                    @else
+                                        <div class="font-medium">{{ $c->name ?? ('Candidate #'.$c->id) }}</div>
+                                    @endif
+                                    <div class="text-xs text-gray-400">ID: {{ $c->id }}</div>
+                                </div>
                             </label>
                         </li>
-                        @endforeach
-
-
+                    @endforeach
                 </ul>
+
                 @error('choiceId') <div class="text-sm text-red-600 mt-2">{{ $message }}</div> @enderror
+
+                {{-- Selected candidate details --}}
+                @php
+                    $selected = $candidates->firstWhere('id', $choiceId);
+                @endphp
+
+                @if ($selected)
+                    @php
+                        $name  = $selected->member?->name ?? ($selected->name ?? ('Candidate #'.$selected->id));
+                        $email = $selected->member?->email;
+                        $photo = $selected->photo_url;
+                        if ($photo && !str_starts_with($photo, 'http')) {
+                            $photo = \Illuminate\Support\Facades\Storage::url($photo);
+                        }
+                    @endphp
+
+                    <div class="mt-4 border rounded p-4 flex gap-4 items-start bg-slate-50">
+                        @if ($photo)
+                            <img src="{{ $photo }}" alt="Candidate photo"
+                                class="h-20 w-20 rounded object-cover border">
+                        @endif
+                        <div class="min-w-0">
+                            <div class="font-semibold truncate">{{ $name }}</div>
+                            @if ($email)
+                                <div class="text-sm text-gray-500">{{ $email }}</div>
+                            @endif
+                            @if ($selected->bio)
+                                <div class="mt-2 text-sm text-gray-700 whitespace-pre-line">
+                                    {{ $selected->bio }}
+                                </div>
+                            @else
+                                <div class="mt-2 text-sm text-gray-400">No bio provided.</div>
+                            @endif
+                        </div>
+                    </div>
+                @endif
             @endif
         </div>
+
 
         {{-- Cast vote --}}
         <div class="text-xs text-gray-400 mt-2">

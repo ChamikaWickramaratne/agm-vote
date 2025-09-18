@@ -12,11 +12,15 @@ use Livewire\Attributes\Layout;
 use Livewire\Component;
 use Livewire\WithPagination;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Facades\Cache;
+use Livewire\WithFileUploads;
 
 #[Layout('layouts.app')]
 class SessionShow extends Component
 {
     use WithPagination;
+    use WithFileUploads;
 
     public Conference $conference;
     public VotingSession $session;
@@ -45,6 +49,13 @@ class SessionShow extends Component
 
     /** Select value for “Add Candidate from Members” */
     public ?int $pickMemberId = null;
+
+    public bool $showEditModal = false;
+    public ?int $editCandidateId = null;
+    public string $editName = '';
+    public ?string $editBio = null;
+    public ?string $editPhotoUrl = null;
+    public ?\Livewire\Features\SupportFileUploads\TemporaryUploadedFile $editPhoto = null; 
 
     public function mount(Conference $conference, VotingSession $session): void
     {
@@ -115,34 +126,64 @@ class SessionShow extends Component
         $role = optional(auth()->user())->role;
         if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
 
-        // Optional guard: disallow after conference has ended
         if ($this->conference->end_date) {
             $this->addError('members', 'Conference has ended.');
             return;
         }
 
-        $existing = VoterId::where('voting_session_id', $this->session->id)
+        // Check assignment for THIS session (to satisfy NOT NULL voting_session_id)
+        $existingCurrent = VoterId::where('voting_session_id', $this->session->id)
             ->where('member_id', $memberId)
             ->first();
 
         if ($checked) {
-            if ($existing) return; // already assigned
+            if ($existingCurrent) {
+                if ($enc = Cache::get("voter_code_enc:{$existingCurrent->id}")) {
+                    try { $this->justIssued[$memberId] = Crypt::decryptString($enc); } catch (\Throwable $e) {}
+                }
+                return;
+            }
 
-            $code = $this->generateCode(6);
-            $hash = Hash::make($code);
+            $existingAny = VoterId::where('conference_id', $this->conference->id)
+                ->where('member_id', $memberId)
+                ->orderByDesc('id')
+                ->first();
 
-            VoterId::create([
-                'voting_session_id' => $this->session->id,
-                'member_id'         => $memberId,
-                'voter_code_hash'   => $hash,
-                'issued_by'         => auth()->id(),
-                'issued_at'         => now(),
-            ]);
+            if ($existingAny) {
+                $new = VoterId::create([
+                    'conference_id'     => $this->conference->id,
+                    'voting_session_id' => $this->session->id,
+                    'member_id'         => $memberId,
+                    'voter_code_hash'   => $existingAny->voter_code_hash,
+                    'issued_by'         => auth()->id(),
+                    'issued_at'         => now(),
+                ]);
 
-            // show plaintext once
-            $this->justIssued[$memberId] = $code;
+                if ($enc = Cache::get("voter_code_enc:{$existingAny->id}")) {
+                    Cache::put("voter_code_enc:{$new->id}", $enc, now()->addYear());
+                }
+
+            } else {
+                $code = $this->generateCode(6);
+                $new  = VoterId::create([
+                    'conference_id'     => $this->conference->id,
+                    'voting_session_id' => $this->session->id,
+                    'member_id'         => $memberId,
+                    'voter_code_hash'   => Hash::make($code),
+                    'issued_by'         => auth()->id(),
+                    'issued_at'         => now(),
+                ]);
+
+                Cache::put("voter_code_enc:{$new->id}", Crypt::encryptString($code), now()->addYear());
+
+                $this->justIssued[$memberId] = $code;
+            }
+
         } else {
-            if ($existing) $existing->delete();
+            if ($existingCurrent) {
+                Cache::forget("voter_code_enc:{$existingCurrent->id}");
+                $existingCurrent->delete();
+            }
             unset($this->justIssued[$memberId]);
         }
 
@@ -233,15 +274,22 @@ class SessionShow extends Component
         $cands = Candidate::query()
             ->with('member')
             ->where('position_id', $posId)
-            ->withCount([
-                'ballots as votes_count' => fn($q) => $q->where('voting_session_id', $this->session->id),
-            ])
-            ->orderByDesc('votes_count')
             ->orderBy('id')
             ->get();
 
-        $this->totalVotes = (int) $cands->sum('votes_count');
+        $latestPerVoter = DB::table('ballots as b1')
+            ->select(DB::raw('MAX(b1.id) AS max_id'))
+            ->where('b1.voting_session_id', $this->session->id)
+            ->groupBy('b1.voter_code_hash');
 
+        $tallies = DB::table('ballots as b')
+            ->joinSub($latestPerVoter, 'lpv', fn($j) => $j->on('b.id', '=', 'lpv.max_id'))
+            ->where('b.voting_session_id', $this->session->id)
+            ->select('b.candidate_id', DB::raw('COUNT(*) AS votes'))
+            ->groupBy('b.candidate_id')
+            ->pluck('votes', 'candidate_id');
+
+        $this->totalVotes = (int) $tallies->sum();
         $this->thresholdPercent = (float) ($this->session->majority_percent ?? 50.0);
         $this->thresholdVotes   = $this->totalVotes > 0
             ? ($this->thresholdPercent / 100.0) * $this->totalVotes
@@ -249,8 +297,8 @@ class SessionShow extends Component
 
         $rows = [];
         foreach ($cands as $c) {
-            $name = $c->member->name ?? ($c->name ?? ('Candidate #'.$c->id));
-            $votes = (int) $c->votes_count;
+            $name    = $c->member->name ?? ($c->name ?? ('Candidate #'.$c->id));
+            $votes   = (int) ($tallies[$c->id] ?? 0);
             $percent = $this->totalVotes > 0 ? round(($votes / $this->totalVotes) * 100, 2) : 0.0;
 
             $rows[] = [
@@ -263,19 +311,19 @@ class SessionShow extends Component
         }
         $this->candidatesWithVotes = $rows;
 
-        // track which member ids are already candidates
+        // 5) Track which member ids are already candidates (unchanged)
         $this->candidateMemberIds = $cands->pluck('member_id')->filter()->values()->all();
 
-        // plurality (highest votes)
-        $maxVotes = $cands->max('votes_count') ?? 0;
+        // 6) Plurality winner(s) from last-vote-wins tallies
+        $maxVotes = empty($rows) ? 0 : max(array_column($rows, 'votes_count'));
         $this->winner = [
             'max' => (int) $maxVotes,
             'ids' => $maxVotes > 0
-                ? $cands->where('votes_count', $maxVotes)->pluck('id')->all()
+                ? array_column(array_filter($rows, fn($r) => $r['votes_count'] === $maxVotes), 'id')
                 : [],
         ];
 
-        // majority: anyone >= thresholdVotes?
+        // 7) Majority check against last-vote totals
         $this->hasMajority     = false;
         $this->majorityPercent = 0.0;
         $this->majorityWinners = [];
@@ -289,6 +337,12 @@ class SessionShow extends Component
                 }
             }
         }
+        $this->dispatch(
+            'results-updated',
+            candidates: $this->candidatesWithVotes,
+            total: $this->totalVotes,
+            thresholdPercent: $this->thresholdPercent
+        );
     }
 
     protected function generateCode(int $len = 6): string
@@ -315,7 +369,18 @@ class SessionShow extends Component
             ->pluck('id', 'member_id')
             ->all();
 
-        // For the "Add Candidate" select: all members NOT already candidates
+        $codesByMember = [];
+
+        foreach ($this->assigned as $memberId => $voterId) {
+            $enc = Cache::get("voter_code_enc:{$voterId}");
+            if ($enc) {
+                try { $codesByMember[$memberId] = Crypt::decryptString($enc); }
+                catch (\Throwable $e) { $codesByMember[$memberId] = null; }
+            } else {
+                $codesByMember[$memberId] = null;
+            }
+        }
+
         $availableMembers = Member::query()
             ->when(!empty($this->candidateMemberIds), fn($q) => $q->whereNotIn('id', $this->candidateMemberIds))
             ->orderBy('name')
@@ -324,6 +389,97 @@ class SessionShow extends Component
         return view('livewire.admin.session-show', [
             'members'          => $members,
             'availableMembers' => $availableMembers,
+            'codesByMember'    => $codesByMember,
         ]);
     }
+
+    protected function validateEdit(): array
+    {
+        return $this->validate([
+            'editName'      => 'required|string|max:255',
+            'editBio'       => 'nullable|string',
+            'editPhotoUrl'  => 'nullable|url|max:2048',
+            'editPhoto'     => 'nullable|image|max:2048|mimes:jpg,jpeg,png,webp',
+        ]);
+    }
+
+    public function startEditCandidate(int $candidateId): void
+    {
+        $role = optional(auth()->user())->role;
+        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
+
+        $candidate = Candidate::with('member')->findOrFail($candidateId);
+
+        // Optional: forbid edits if session is closed
+        if ($this->session->status === 'Closed') {
+            $this->addError('candidates', 'This session is closed.');
+            return;
+        }
+
+        $this->editCandidateId = $candidate->id;
+        $this->editName        = $candidate->name ?? ($candidate->member->name ?? '');
+        $this->editBio         = $candidate->bio;
+        $this->editPhotoUrl    = $candidate->photo_url;
+        $this->editPhoto       = null;
+
+        $this->resetValidation(); // clear old validation errors
+        $this->showEditModal = true;
+    }
+
+    public function saveCandidate(): void
+    {
+        $role = optional(auth()->user())->role;
+        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
+
+        if (! $this->editCandidateId) return;
+
+        // Optional: forbid edits if session is closed
+        if ($this->session->status === 'Closed') {
+            $this->addError('candidates', 'This session is closed.');
+            return;
+        }
+
+        $data = $this->validateEdit();
+
+        $candidate = Candidate::findOrFail($this->editCandidateId);
+
+        // Handle file upload if a new photo was provided
+        if ($this->editPhoto) {
+            // If the candidate already has a locally stored file, delete it
+            if ($candidate->photo_url && !str_starts_with($candidate->photo_url, 'http')) {
+                Storage::disk('public')->delete($candidate->photo_url);
+            }
+
+            // Save new file into storage/app/public/candidates
+            $path = $this->editPhoto->store('candidates', 'public');
+
+            // Save the relative path in DB (recommended)
+            $candidate->photo_url = $path;
+        } elseif (isset($data['editPhotoUrl'])) {
+            // If no file uploaded but URL provided
+            $candidate->photo_url = $data['editPhotoUrl'] ?: $candidate->photo_url;
+        }
+
+        // Update the rest
+        $candidate->name = $data['editName'];
+        $candidate->bio  = $data['editBio'] ?? null;
+        $candidate->save();
+
+        // Refresh panels
+        $this->rebuildCandidatesPanel();
+        $this->session->refresh();
+
+        $this->showEditModal = false;
+        session()->flash('ok', 'Candidate updated.');
+    }
+
+    public function cancelEdit(): void
+    {
+        $this->showEditModal   = false;
+        $this->editCandidateId = null;
+        $this->reset(['editName','editBio','editPhotoUrl','editPhoto']);
+        $this->resetValidation();
+    }
+
+
 }
