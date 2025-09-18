@@ -233,6 +233,7 @@ class SessionShow extends Component
         $already = Candidate::where('position_id', $this->session->position_id)
             ->where('member_id', $memberId)
             ->exists();
+
         if ($already) {
             session()->flash('ok', 'Member is already a candidate for this position.');
             return;
@@ -240,15 +241,22 @@ class SessionShow extends Component
 
         $member = Member::findOrFail($memberId);
 
+        // Build display name from first_name + last_name
+        $fullName = trim(($member->first_name ?? '').' '.($member->last_name ?? ''));
+        $displayName = $fullName !== '' ? $fullName : ($member->name ?? 'Member #'.$member->id);
+
         Candidate::create([
             'position_id' => $this->session->position_id,
             'member_id'   => $member->id,
-            'name'        => $member->name, // optional (display primarily uses related member)
+            'name'        => $displayName,
+            'bio'         => $member->bio,
+            'photo_url'   => $member->photo,   // assuming member->photo stores a storage path
         ]);
 
         $this->session->refresh();
         session()->flash('ok', 'Candidate added.');
     }
+
 
     /**
      * Build the candidates + votes + (plurality & majority) snapshots
