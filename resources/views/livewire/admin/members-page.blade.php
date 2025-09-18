@@ -50,28 +50,6 @@
                 @error('last_name') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
 
-            {{-- Branch --}}
-            <div>
-                <label class="block text-sm font-medium text-[#4F200D]">Branch</label>
-                <select wire:model.defer="branch_name" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
-                    <option value="">-- Select --</option>
-                    <option>Branch A</option>
-                    <option>Branch B</option>
-                </select>
-                @error('branch_name') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-            </div>
-
-            {{-- Member Type --}}
-            <div>
-                <label class="block text-sm font-medium text-[#4F200D]">Member Type</label>
-                <select wire:model.defer="member_type" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
-                    <option value="">-- Select --</option>
-                    <option>Type A</option>
-                    <option>Type B</option>
-                </select>
-                @error('member_type') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-            </div>
-
             {{-- Email --}}
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">Email (optional)</label>
@@ -86,6 +64,14 @@
                 <textarea wire:model.defer="bio" rows="3" 
                           class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]"></textarea>
                 @error('bio') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+            </div>
+            <!-- Add under Bio, for example -->
+            <div>
+            <label class="block text-sm font-medium text-[#4F200D]">Photo</label>
+            <input type="file" wire:model="photoUpload"
+                    accept="image/*"
+                    class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
+            @error('photoUpload') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
 
             {{-- Submit --}}
@@ -114,8 +100,6 @@
                         <th class="py-2 px-4">Title</th>
                         <th class="py-2 px-4">First Name</th>
                         <th class="py-2 px-4">Last Name</th>
-                        <th class="py-2 px-4">Branch</th>
-                        <th class="py-2 px-4">Type</th>
                         <th class="py-2 px-4">Email</th>
                         <th class="py-2 px-4">Bio</th>
                         <th class="py-2 px-4">Photo</th>
@@ -160,4 +144,96 @@
             {{ $members->links() }}
         </div>
     </div>
+
+    {{-- Edit Modal --}}
+    <@if ($showEditModal)
+        <div class="fixed inset-0 z-50 flex items-center justify-center">
+        {{-- Backdrop --}}
+        <div class="absolute inset-0 bg-black/50" @click="open=false; $wire.call('cancelEdit')"></div>
+
+        {{-- Panel --}}
+        <div class="relative bg-white w-full max-w-2xl rounded-2xl shadow-lg p-6 mx-4"
+            @keydown.escape.window="open=false; $wire.call('cancelEdit')">
+            <div class="flex items-center justify-between mb-4">
+                <h3 class="font-bold text-lg text-[#4F200D]">
+                    ✏️ Edit Member @if($editingId)#{{ $editingId }}@endif
+                </h3>
+                <button class="p-2 rounded hover:bg-gray-100"
+                        @click="open=false; $wire.call('cancelEdit')">✖</button>
+            </div>
+
+            <form wire:submit.prevent="update" class="grid gap-6 sm:grid-cols-2" enctype="multipart/form-data">
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">Title</label>
+                    <select wire:model.defer="editTitle" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                        <option value="">-- Select --</option>
+                        <option>Mr.</option>
+                        <option>Mrs.</option>
+                        <option>Miss</option>
+                        <option>Ms</option>
+                    </select>
+                    @error('editTitle') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">First Name</label>
+                    <input type="text" wire:model.defer="editFirstName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    @error('editFirstName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">Last Name</label>
+                    <input type="text" wire:model.defer="editLastName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    @error('editLastName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">Branch</label>
+                    <input type="text" wire:model.defer="editBranchName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    @error('editBranchName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">Member Type</label>
+                    <input type="text" wire:model.defer="editMemberType" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    @error('editMemberType') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">Email</label>
+                    <input type="email" wire:model.defer="editEmail" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    @error('editEmail') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-[#4F200D]">Bio</label>
+                    <textarea rows="3" wire:model.defer="editBio" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2"></textarea>
+                    @error('editBio') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-[#4F200D]">Photo</label>
+                    <input type="file" wire:model="editPhotoUpload" accept="image/*"
+                        class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    @error('editPhotoUpload') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror>
+
+                    {{-- Preview (new upload or current) --}}
+                    <div class="mt-2">
+                        @if($editPhotoUpload)
+                            <img src="{{ $editPhotoUpload->temporaryUrl() }}" class="h-16 rounded-lg shadow">
+                        @elseif($editingId && optional(\App\Models\Member::find($editingId))->photo)
+                            <img src="{{ Storage::url(\App\Models\Member::find($editingId)->photo) }}" class="h-16 rounded-lg shadow">
+                        @endif
+                    </div>
+                </div>
+
+                <div class="sm:col-span-2 flex justify-end gap-3">
+                    <button type="button" @click="open=false; $wire.call('cancelEdit')"
+                            class="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300">Cancel</button>
+                    <button type="submit"
+                            class="px-6 py-2 rounded-lg bg-[#4F200D] text-white hover:bg-[#FF9A00]">Save</button>
+                </div>
+            </form>
+        </div>
+    @endif
 </div>
