@@ -20,6 +20,18 @@
         class="text-[#4F200D] hover:text-[#FF9A00] transition duration-300 ease-in-out transform hover:scale-105">
         {{ __('Members') }}
     </x-nav-link>
+
+    @php
+        $user = auth()->user();
+    @endphp
+
+    @if($user && in_array($user->role, ['SuperAdmin', 'Admin']))
+            <x-nav-link :href="route('system.voting-managers')" :active="request()->routeIs('system.voting-managers')"
+                class="text-[#4F200D] hover:text-[#FF9A00] transition duration-300 ease-in-out transform hover:scale-105">
+                {{ __('Voting Manager') }}
+            </x-nav-link>
+    @endif
+
 </div>
 
             <!-- Settings Dropdown -->

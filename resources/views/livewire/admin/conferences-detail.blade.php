@@ -1,37 +1,69 @@
 <x-slot name="header">
-    <h2 class="font-semibold text-xl text-gray-800 leading-tight">
+    <h2 class="font-bold text-2xl text-[#4F200D] flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-[#FF9A00]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+        </svg>
         Conference #{{ $conference->id }}
     </h2>
 </x-slot>
 
-<div class="py-8 max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
+<div class="py-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
 
+    {{-- Flash success --}}
     @if (session('ok'))
-        <div class="p-3 rounded bg-green-100 text-green-800">
+        <div class="p-4 rounded-lg bg-[#FFD93D] text-[#4F200D] shadow flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-[#FF9A00]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m1 8a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
             {{ session('ok') }}
         </div>
     @endif
 
-    <div class="bg-white shadow sm:rounded-lg p-6">
-        <div class="grid sm:grid-cols-2 gap-4">
-            <div><span class="text-gray-500">Start:</span>
-                <div class="font-medium">
+    {{-- Conference Info --}}
+    <div class="bg-[#F6F1E9] p-8 rounded-2xl shadow-md border border-[#FFD93D]">
+        <div class="grid sm:grid-cols-2 gap-6">
+            <div>
+                <span class="text-gray-600 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         class="w-6 h-6 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <circle cx="12" cy="12" r="10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/>
+                    </svg>
+                    Start:
+                </span>
+                <div class="font-medium text-lg text-[#4F200D]">
                     {{ optional($conference->start_date)->format('Y-m-d H:i') ?? '—' }}
                 </div>
             </div>
-            <div><span class="text-gray-500">End:</span>
-                <div class="font-medium">
+            <div>
+                <span class="text-gray-600 flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         class="w-6 h-6 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200"
+                         fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M6 2v6h.01M18 22v-6h-.01M6 8h12v8H6z"/>
+                    </svg>
+                    End:
+                </span>
+                <div class="font-medium text-lg text-[#4F200D]">
                     {{ optional($conference->end_date)->format('Y-m-d H:i') ?? '—' }}
                 </div>
             </div>
         </div>
 
         {{-- Actions --}}
-        <div class="mt-4 flex flex-col sm:flex-row gap-3">
+        <div class="mt-6 flex flex-col sm:flex-row gap-4">
             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                 @if (is_null($conference->end_date))
                     <button wire:click="endConference"
-                            class="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700">
+                            class="flex items-center gap-2 px-6 py-2 bg-[#FF9A00] text-[#4F200D] font-semibold rounded-lg shadow-md
+                                   hover:bg-[#FFD93D] hover:text-[#4F200D] transition-colors duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             class="w-5 h-5 text-[#4F200D] hover:text-[#FF9A00] transition-colors duration-200"
+                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <circle cx="12" cy="12" r="10" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M9 9h6v6H9z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
                         End Conference
                     </button>
                 @else
@@ -39,12 +71,17 @@
                 @endif
             </x-role>
 
-            {{-- Public link for admins to copy/share --}}
             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
-                <div class="flex items-center space-x-2">
-                    <a href="{{ route('public.conference', $conference->public_token) }}"
-                       target="_blank"
-                       class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                <div class="flex items-center space-x-3">
+                    <a href="{{ route('public.conference', $conference->public_token) }}" target="_blank"
+                       class="flex items-center gap-2 px-6 py-2 bg-[#FFD93D] text-[#4F200D] font-semibold rounded-lg shadow-md
+                              hover:bg-[#FF9A00] hover:text-white transition-colors duration-200">
+                        <svg xmlns="http://www.w3.org/2000/svg"
+                             class="w-5 h-5 text-[#4F200D] hover:text-white transition-colors duration-200"
+                             fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                  d="M13.828 10.172a4 4 0 010 5.656l-1.414 1.414a4 4 0 01-5.656-5.656l1.414-1.414a4 4 0 015.656 0zM10.172 13.828a4 4 0 010-5.656l1.414-1.414a4 4 0 015.656 5.656l-1.414 1.414a4 4 0 01-5.656 0z"/>
+                        </svg>
                         Public Link
                     </a>
                     <span class="text-sm text-gray-500">Share this link with voters</span>
@@ -53,36 +90,35 @@
         </div>
     </div>
 
-    {{-- QR code card --}}
-    <div
-        x-data="{ open:false }"
-        class="bg-white shadow sm:rounded-lg p-6 mt-6 flex flex-col items-center">
+    {{-- QR Code --}}
+    <div x-data="{ open:false }" class="bg-[#F6F1E9] p-8 rounded-2xl shadow-md border border-[#FFD93D] flex flex-col items-center">
+        <h3 class="font-semibold text-lg mb-4 flex items-center gap-2 text-[#4F200D]">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h4v4H3V3zM17 3h4v4h-4V3zM3 17h4v4H3v-4zM7 7h10v10H7V7z"/>
+            </svg>
+            QR Code for Voters
+        </h3>
 
-        <h3 class="font-semibold mb-3">QR Code for Voters</h3>
-
-        {{-- Clickable QR preview --}}
-        <div class="cursor-pointer" @click="open = true">
-            {!! QrCode::format('svg')->size(200)->margin(1)
-                ->generate(route('public.conference', $conference->public_token)) !!}
+        <div class="cursor-pointer hover:scale-105 transition" @click="open = true">
+            {!! QrCode::format('svg')->size(200)->margin(1)->generate(route('public.conference', $conference->public_token)) !!}
         </div>
-        <div class="text-xs text-gray-500 mt-2">
-            Click QR to enlarge
-        </div>
+        <div class="text-xs text-gray-500 mt-2">Click QR to enlarge</div>
 
-        {{-- Fullscreen modal --}}
-        <div x-show="open"
-             x-transition
-             class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-             @click.self="open = false">
-
-            <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl w-full flex flex-col items-center">
-                <h3 class="font-semibold mb-3">Conference QR Code</h3>
+        <div x-show="open" x-transition class="fixed inset-0 z-50 flex items-center justify-center bg-black/70" @click.self="open = false">
+            <div class="bg-[#F6F1E9] p-8 rounded-xl shadow-lg max-w-xl w-full flex flex-col items-center border border-[#FFD93D]">
+                <h3 class="font-semibold text-lg mb-4 flex items-center gap-2 text-[#4F200D]">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-8 h-8 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h4v4H3V3zM17 3h4v4h-4V3zM3 17h4v4H3v-4zM7 7h10v10H7V7z"/>
+                    </svg>
+                    Conference QR Code
+                </h3>
                 <div>
-                    {!! QrCode::format('svg')->size(500)->margin(1)
-                        ->generate(route('public.conference', $conference->public_token)) !!}
+                    {!! QrCode::format('svg')->size(500)->margin(1)->generate(route('public.conference', $conference->public_token)) !!}
                 </div>
-                <button @click="open = false"
-                        class="mt-4 px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
+                <button @click="open = false" class="mt-6 flex items-center gap-2 px-6 py-2 rounded-lg bg-red-600 text-white shadow hover:bg-red-700 transition">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
                     Close
                 </button>
             </div>
@@ -90,173 +126,63 @@
     </div>
 
     {{-- Voting Sessions --}}
-    <div class="bg-white shadow sm:rounded-lg p-6 space-y-6">
-        <h3 class="font-semibold">Voting Sessions</h3>
+    <div class="bg-[#F6F1E9] p-8 rounded-2xl shadow-md border border-[#FFD93D] space-y-6">
+        <h3 class="font-semibold text-lg flex items-center gap-2 text-[#4F200D]">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2-8H7a2 2 0 00-2 2v8a2 2 0 002 2h10a2 2 0 002-2v-8a2 2 0 00-2-2z"/>
+            </svg>
+            Voting Sessions
+        </h3>
 
-        {{-- Create form only while conference is open --}}
-        @if (is_null($conference->end_date))
-            <x-role :roles="['SuperAdmin','Admin','VotingManager']">
-                <form wire:submit.prevent="createSession" class="grid gap-4 sm:grid-cols-3">
-                    <div class="sm:col-span-1">
-                        <label class="block text-sm font-medium">Position</label>
-                        <select
-                            class="mt-1 w-full border rounded p-2"
-                            {{-- handle "__new" sentinel with change hook --}}
-                            wire:change="handlePositionChange($event.target.value)">
-                            <option value="">-- Select position --</option>
-                            @foreach($positions as $p)
-                                <option value="{{ $p->id }}" @selected($position_id===$p->id)>{{ $p->name }}</option>
-                            @endforeach
-                            <option value="__new">+ New position…</option>
-                        </select>
-                        @error('position_id') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                    </div>
-
-                    <div class="sm:col-span-1">
-                        <label class="block text-sm font-medium">Starts at (optional)</label>
-                        <input type="datetime-local" wire:model.defer="session_starts_at" class="mt-1 w-full border rounded p-2">
-                        @error('session_starts_at') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                    </div>
-
-                    <div class="sm:col-span-1">
-                        <label class="block text-sm font-medium">Close Condition</label>
-                        <select wire:model.live="close_condition" class="mt-1 w-full border rounded p-2">
-                            <option value="Manual">Manual</option>
-                            <option value="Timer">Timer</option>
-                            <option value="AllVotesCast">AllVotesCast</option>
-                        </select>
-                    </div>
-
-                    <div class="sm:col-span-1">
-                        <label class="block text-sm font-medium">Majority threshold (%)</label>
-                        <input
-                            type="number" step="0.01" min="0" max="100"
-                            wire:model.defer="majority_percent"
-                            class="mt-1 w-full border rounded p-2"
-                            placeholder="e.g. 50"
-                        >
-                        @error('majority_percent') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                        <div class="text-xs text-gray-500 mt-1">
-                            A candidate must reach at least this percent of total ballots in the session to achieve majority.
-                        </div>
-                    </div>
-
-                    @if ($close_condition === 'Timer')
-                        <div class="sm:col-span-1">
-                            <label class="block text-sm font-medium">Close after (minutes)</label>
-                            <input type="number" min="1" max="1440"
-                                   wire:model.defer="close_after_minutes"
-                                   class="mt-1 w-full border rounded p-2" placeholder="e.g. 15">
-                            @error('close_after_minutes') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                        </div>
-                    @endif
-
-                    <div class="sm:col-span-3">
-                        <button type="submit"
-                                class="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
-                            Create Session
-                        </button>
-                    </div>
-                </form>
-            </x-role>
-        @else
-            <div class="text-sm text-gray-600">This conference has ended. New sessions cannot be created.</div>
-        @endif
-
-        {{-- Sessions table --}}
+        {{-- Table --}}
         <div class="overflow-x-auto">
-            <table class="min-w-full text-sm">
-                <thead>
-                    <tr class="text-left border-b">
-                        <th class="py-2 pr-4">ID</th>
-                        <th class="py-2 pr-4">Position</th>
-                        <th class="py-2 pr-4">Status</th>
-                        <th class="py-2 pr-4">Start</th>
-                        <th class="py-2 pr-4">End</th>
-                        <th class="py-2 pr-4">Actions</th>
+            <table class="min-w-full text-sm border border-[#FFD93D] rounded-lg overflow-hidden">
+                <thead class="bg-[#FFD93D] text-[#4F200D]">
+                    <tr>
+                        <th class="py-3 px-4">ID</th>
+                        <th class="py-3 px-4">Position</th>
+                        <th class="py-3 px-4">Status</th>
+                        <th class="py-3 px-4">Start</th>
+                        <th class="py-3 px-4">End</th>
+                        <th class="py-3 px-4">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                 @forelse($conference->sessions as $s)
-                    <tr class="border-b">
-                        <td class="py-2 pr-4">
-                            <a class="text-indigo-600 hover:underline"
+                    <tr class="border-b hover:bg-[#FFD93D]/20 transition">
+                        <td class="py-2 px-4">{{ $s->id }}</td>
+                        <td class="py-2 px-4">{{ optional($s->position)->name ?? '—' }}</td>
+                        <td class="py-2 px-4">{{ $s->status }}</td>
+                        <td class="py-2 px-4">{{ optional($s->start_time)->format('Y-m-d H:i') ?? '—' }}</td>
+                        <td class="py-2 px-4">{{ optional($s->end_time)->format('Y-m-d H:i') ?? '—' }}</td>
+                        <td class="py-2 px-4 flex gap-2">
+                            <a class="flex items-center gap-1 px-3 py-1 rounded-lg bg-[#FFD93D] text-[#4F200D] hover:bg-[#FF9A00] hover:text-white transition"
                                href="{{ route('system.sessions.show', [$conference, $s]) }}">
-                                {{ $s->id }}
-                            </a>
-                        </td>
-                        <td class="py-2 pr-4">{{ optional($s->position)->name ?? '—' }}</td>
-                        <td class="py-2 pr-4">{{ $s->status }}</td>
-                        <td class="py-2 pr-4">{{ optional($s->start_time)->format('Y-m-d H:i') ?? '—' }}</td>
-                        <td class="py-2 pr-4">{{ optional($s->end_time)->format('Y-m-d H:i') ?? '—' }}</td>
-                        <td class="py-2 pr-4">
-                            <a class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                               href="{{ route('system.sessions.show', [$conference, $s]) }}">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-[#4F200D] hover:text-white transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                                </svg>
                                 View
                             </a>
                             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                                 @if (is_null($conference->end_date))
-                                    <button
-                                        type="button"
-                                        wire:click="reuseSession({{ $s->id }})"
-                                        wire:loading.attr="disabled"
-                                        class="ml-2 px-3 py-1 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50">
+                                    <button type="button"
+                                            wire:click="reuseSession({{ $s->id }})"
+                                            class="flex items-center gap-1 px-3 py-1 rounded-lg bg-[#4F200D] text-white hover:bg-[#FF9A00] transition">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-[#FF9A00] hover:text-[#FFD93D] transition-colors duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v6h6M20 20v-6h-6M4 10a8 8 0 0116 0M20 14a8 8 0 01-16 0"/>
+                                        </svg>
                                         Reuse
                                     </button>
-                                @else
-                                    <span class="ml-2 text-xs text-gray-400">Reuse disabled (conference ended)</span>
                                 @endif
                             </x-role>
                         </td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="py-4 text-gray-500">No sessions yet.</td></tr>
+                    <tr><td colspan="6" class="py-6 text-center text-gray-500">No sessions yet.</td></tr>
                 @endforelse
                 </tbody>
             </table>
         </div>
     </div>
-
-    {{-- Create Position Modal (Livewire-controlled) --}}
-    @if ($this->showPositionModal)
-        <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" x-data>
-            <div class="bg-white w-full max-w-lg rounded-xl shadow p-6">
-                <h3 class="text-lg font-semibold mb-4">Create New Position</h3>
-
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium">Name</label>
-                        <input type="text" wire:model.defer="newPositionName" class="mt-1 w-full border rounded p-2" autofocus>
-                        @error('newPositionName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium">Description (optional)</label>
-                        <textarea wire:model.defer="newPositionDescription" class="mt-1 w-full border rounded p-2" rows="3"></textarea>
-                        @error('newPositionDescription') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                    </div>
-
-                    {{-- If you actually use regions, show a select; otherwise remove this block --}}
-                    {{-- <div>
-                        <label class="block text-sm font-medium">Region (optional)</label>
-                        <input type="number" wire:model.defer="newPositionRegionId" class="mt-1 w-full border rounded p-2" placeholder="Region ID">
-                        @error('newPositionRegionId') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                    </div> --}}
-                </div>
-
-                <div class="mt-6 flex items-center justify-end gap-3">
-                    <button type="button"
-                            wire:click="$set('showPositionModal', false)"
-                            class="px-4 py-2 rounded bg-gray-200 hover:bg-gray-300">
-                        Cancel
-                    </button>
-                    <button type="button"
-                            wire:click="saveNewPosition"
-                            class="px-4 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700">
-                        Save Position
-                    </button>
-                </div>
-            </div>
-        </div>
-    @endif
 </div>
