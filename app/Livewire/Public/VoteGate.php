@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Hash;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-#[Layout('layouts.public')] // use your guest-safe layout
+#[Layout('layouts.public')]
 class VoteGate extends Component
 {
     public VotingSession $session;
@@ -17,7 +17,6 @@ class VoteGate extends Component
 
     public function mount(VotingSession $session): void
     {
-        // Session must be Open; also ensure conference is not ended
         $session->load('conference');
         abort_if($session->status !== 'Open', 404);
         abort_if(optional($session->conference)->end_date !== null, 404);
@@ -28,13 +27,11 @@ class VoteGate extends Component
     public function verify(): void
     {
         $this->validate([
-            'code' => ['required','string','size:6'], // you chose 6 chars
+            'code' => ['required','string','size:6'],
         ]);
 
-        // find voter_id assignment for this session (we store only hash)
-        // We can’t search by plaintext; check against all voter_ids for this session
         $candidates = VoterId::where('voting_session_id', $this->session->id)
-            ->where('used', false) // optional: block codes already used
+            ->where('used', false)
             ->get();
 
         $match = null;
@@ -50,13 +47,8 @@ class VoteGate extends Component
             return;
         }
 
-        // Mark that this browser has passed the gate for this session
-        // (anonymous; we store only the voter_ids row id)
         session()->put("voter_access.session_{$this->session->id}", $match->id);
 
-        // Optionally: rotate a per-visit nonce, etc.
-
-        // Go to the ballot page
         $this->redirectRoute('public.vote.page', $this->session);
     }
 
