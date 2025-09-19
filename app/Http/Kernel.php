@@ -68,6 +68,6 @@ class Kernel extends HttpKernel
 
     protected function schedule(\Illuminate\Console\Scheduling\Schedule $schedule): void
     {
-        $schedule->command('sessions:close-timed')->everyMinute();
+        $schedule->command('sessions:auto-close')->everyMinute();
     }
 }

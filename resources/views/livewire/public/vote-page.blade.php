@@ -4,7 +4,7 @@
     </h2>
 </x-slot>
 
-<div class="py-8 max-w-3xl mx-auto sm:px-6 lg:px-8 space-y-6">
+<div class="py-8 max-w-3xl mx-auto sm:px-6 lg:px-8 space-y-6" wire:poll.5s="pollStatus">
     @if (session('ok'))
         <div class="p-3 rounded bg-green-100 text-green-800">{{ session('ok') }}</div>
     @endif

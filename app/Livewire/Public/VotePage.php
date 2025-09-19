@@ -17,10 +17,8 @@ class VotePage extends Component
 {
     public VotingSession $session;
 
-    /** Member to add as candidate */
     public ?int $pickMemberId = null;
 
-    /** Radio: chosen candidate id */
     public ?int $choiceId = null;
     public ?int $remaining_seconds = null;
 
@@ -28,11 +26,9 @@ class VotePage extends Component
 
     public function mount(VotingSession $session): void
     {
-        // Require gate
         $voterRowId = session()->get("voter_access.session_{$session->id}");
         abort_unless($voterRowId, 403);
 
-        // Session must be Open and conference not ended
         $session->load('conference');
         abort_if($session->status !== 'Open', 404);
         abort_if(optional($session->conference)->end_date !== null, 404);
@@ -51,19 +47,14 @@ class VotePage extends Component
         }
     }
 
-    /**
-     * Add a member as a candidate for this session's position.
-     */
     public function addCandidate(): void
     {
-        // Must have a position
         if (!$this->session->position_id) {
             $this->addError('pickMemberId', 'This session has no position assigned.');
             \Log::warning('addCandidate: session has no position_id', ['session_id' => $this->session->id]);
             return;
         }
 
-        // Validate and find member
         $data = $this->validate([
             'pickMemberId' => ['required','integer','exists:members,id'],
         ]);
@@ -71,14 +62,13 @@ class VotePage extends Component
         try {
             $member = \App\Models\Member::findOrFail($data['pickMemberId']);
 
-            // Create if missing (idempotent)
             $candidate = \App\Models\Candidate::firstOrCreate(
                 ['position_id' => $this->session->position_id, 'member_id' => $member->id],
-                ['name' => $member->name] // optional mirror
+                ['name' => $member->name]
             );
 
             $this->pickMemberId = null;
-            $this->choiceId = $candidate->id;     // preselect so user can submit immediately
+            $this->choiceId = $candidate->id;
             session()->flash('ok', 'Candidate added.');
             \Log::info('Candidate added', [
                 'position_id' => $this->session->position_id,
@@ -91,9 +81,6 @@ class VotePage extends Component
         }
     }
 
-    /**
-     * Cast a single vote for the chosen candidate.
-     */
     public function castVote(): void
     {
         \Log::info('castVote start', [
@@ -115,7 +102,6 @@ class VotePage extends Component
 
             $voter = VoterId::findOrFail($voterRowId);
 
-            // Ensure candidate belongs to this session's position
             $candidate = Candidate::where('id', $this->choiceId)
                 ->where('position_id', $this->session->position_id)
                 ->firstOrFail();
@@ -152,7 +138,6 @@ class VotePage extends Component
             $this->redirectRoute('public.conference', $this->session->conference->public_token);
 
         } catch (\Illuminate\Validation\ValidationException $e) {
-            // Will render @error('choiceId') in the Blade
             \Log::warning('castVote validation failed', ['errors' => $e->errors()]);
             throw $e;
         } catch (\Throwable $e) {
@@ -164,13 +149,11 @@ class VotePage extends Component
 
     public function render()
     {
-        // Current candidates for this session's position
         $candidates = Candidate::with('member')
             ->where('position_id', $this->session->position_id)
             ->orderBy('id')
             ->get();
 
-        // Members not yet candidates
         $excludedMemberIds = $candidates->pluck('member_id')->filter()->values();
         $availableMembers = Member::query()
             ->when($excludedMemberIds->isNotEmpty(), fn($q) => $q->whereNotIn('id', $excludedMemberIds))
@@ -181,7 +164,6 @@ class VotePage extends Component
     }
     public function onPickChanged($value): void
     {
-        // Cast to int or null
         $this->pickMemberId = $value !== '' ? (int) $value : null;
         \Log::info('onPickChanged', ['value' => $value, 'pickMemberId' => $this->pickMemberId]);
     }
@@ -197,12 +179,10 @@ class VotePage extends Component
             return;
         }
 
-        // Validate basic constraints
         $this->validate([
             'customCandidateName' => ['required', 'string', 'max:255'],
         ]);
 
-        // Normalize/guard against whitespace-only names
         $name = trim((string) $this->customCandidateName);
         if ($name === '') {
             $this->addError('customCandidateName', 'Please enter a candidate name.');
@@ -210,10 +190,9 @@ class VotePage extends Component
         }
 
         try {
-            // Prevent duplicate write-ins for this position
             $candidate = Candidate::firstOrCreate(
                 ['position_id' => $this->session->position_id, 'name' => $name, 'member_id' => null],
-                [] // nothing extra; keys above are enough
+                []
             );
 
             $this->customCandidateName = null;
@@ -229,4 +208,30 @@ class VotePage extends Component
         }
     }
 
+    public function pollStatus(): void
+    {
+        // Refresh from DB (and make sure conference is available for the token)
+        $this->session->refresh();
+        $this->session->loadMissing('conference');
+
+        // If auto-closed (or manually closed), bounce to /c/{token}
+        if ($this->session->status !== 'Open' || $this->session->end_time) {
+            session()->flash('vote_error', 'This voting session has closed.');
+            $this->redirectRoute('public.conference', $this->session->conference->public_token);
+            return;
+        }
+
+        // Keep the timer banner in sync while still open
+        if (
+            $this->session->close_condition === 'Timer'
+            && $this->session->start_time
+            && $this->session->close_after_minutes
+        ) {
+            $deadline = \Illuminate\Support\Carbon::parse($this->session->start_time)
+                ->addMinutes($this->session->close_after_minutes);
+            $this->remaining_seconds = max(0, now()->diffInSeconds($deadline, false));
+        } else {
+            $this->remaining_seconds = null;
+        }
+    }
 }

@@ -15,6 +15,19 @@
         </div>
     @endif
 
+     @php
+        $plannedCutoff = ($session->status === 'Open' && $session->close_condition === 'Timer'
+            && $session->start_time && $session->close_after_minutes)
+            ? \Illuminate\Support\Carbon::parse($session->start_time)->addMinutes($session->close_after_minutes)
+            : null;
+    @endphp
+
+    @if ($plannedCutoff)
+        <div class="text-sm text-gray-600">
+            Planned auto-close: <span class="font-medium">{{ $plannedCutoff->format('Y-m-d H:i') }}</span>
+        </div>
+    @endif
+
     {{-- Session info --}}
     <div class="bg-white shadow sm:rounded-lg p-6 space-y-4">
         <div class="grid sm:grid-cols-2 gap-4">
@@ -83,8 +96,6 @@
                             @disabled(!$pickMemberId || !$session->position_id || $session->status === 'Closed')>
                         Add Candidate
                     </button>
-
-                    <div class="text-xs text-gray-400">pickMemberId = {{ var_export($pickMemberId, true) }}</div>
                 </div>
             </x-role>
 
@@ -214,7 +225,6 @@
                         <tr class="text-left border-b">
                             <th class="py-2 pr-4 w-10"></th>
                             <th class="py-2 pr-4">Member</th>
-                            <th class="py-2 pr-4">Email</th>
                             <th class="py-2 pr-4">Session Code</th>
                         </tr>
                     </thead>
@@ -231,36 +241,65 @@
                                     wire:change="toggleMember({{ $m->id }}, $event.target.checked)">
                             </td>
                             <td class="py-2 pr-4">{{ $m->name }}</td>
-                            <td class="py-2 pr-4">{{ $m->email ?? '—' }}</td>
                             <td class="py-2 pr-4">
                                 @php
                                     $isAssigned = isset($assigned[$m->id]);
+                                    $revealedRow = isset($revealed[$m->id]);
                                     $code = $codesByMember[$m->id] ?? null;
                                 @endphp
 
-                                @if ($isAssigned && $code)
-                                    <span class="inline-block rounded bg-slate-100 text-slate-900 px-2 py-0.5 font-mono">
-                                        {{ $code }}
-                                    </span>
-                                    <button
-                                        type="button"
-                                        x-data
-                                        @click="navigator.clipboard.writeText('{{ $code }}')"
-                                        class="ml-2 text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300"
-                                        title="Copy to clipboard"
-                                    >
-                                        Copy
-                                    </button>
-                                @elseif ($isAssigned)
-                                    <span class="inline-block rounded bg-gray-100 text-gray-700 px-2 py-0.5">
-                                        Assigned (code not available)
-                                    </span>
-                                    <span class="ml-2 text-xs text-gray-400">
-                                        Re-issue to seed code cache
-                                    </span>
+                                @if ($isAssigned)
+                                    @if ($revealedRow && $code)
+                                        <span class="inline-block rounded bg-slate-100 text-slate-900 px-2 py-0.5 font-mono">
+                                            {{ $code }}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            x-data
+                                            @click="navigator.clipboard.writeText('{{ $code }}')"
+                                            class="ml-2 text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300"
+                                            title="Copy to clipboard"
+                                        >
+                                            Copy
+                                        </button>
+                                        <button
+                                            type="button"
+                                            wire:click="hideCode({{ $m->id }})"
+                                            class="ml-2 text-xs px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                                            title="Hide"
+                                        >
+                                            Hide
+                                        </button>
+                                    @elseif ($revealedRow && !$code)
+                                        <span class="inline-block rounded bg-gray-100 text-gray-700 px-2 py-0.5">
+                                            Assigned (code not available)
+                                        </span>
+                                        <button
+                                            type="button"
+                                            wire:click="hideCode({{ $m->id }})"
+                                            class="ml-2 text-xs px-2 py-1 rounded bg-gray-200 hover:bg-gray-300"
+                                        >
+                                            Hide
+                                        </button>
+                                        <span class="ml-2 text-xs text-gray-400">Re-issue to seed code cache</span>
+                                    @else
+                                        {{-- Hidden by default --}}
+                                        <span class="inline-block rounded bg-slate-100 text-slate-700 px-2 py-0.5 font-mono select-none">
+                                            ••••••
+                                        </span>
+                                        <button
+                                            type="button"
+                                            wire:click="revealCode({{ $m->id }})"
+                                            class="ml-2 text-xs px-2 py-1 rounded bg-slate-200 hover:bg-slate-300"
+                                            title="Show code"
+                                        >
+                                            Show
+                                        </button>
+                                    @endif
                                 @else
                                     <span class="text-gray-400">—</span>
                                 @endif
+
                             </td>
                         </tr>
                     @endforeach

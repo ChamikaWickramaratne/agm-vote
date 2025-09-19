@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Cache;
 use Livewire\WithFileUploads;
+use Illuminate\Support\Carbon;
 
 #[Layout('layouts.app')]
 class SessionShow extends Component
@@ -33,21 +34,18 @@ class SessionShow extends Component
     public array $winner = ['max' => 0, 'ids' => []]; // highest vote count & candidate ids with that count
 
     /** Majority snapshot */
-    public int   $totalVotes       = 0;          // total ballots in THIS session
-    public float $thresholdPercent = 50.0;       // session-configured majority threshold (e.g., 50.00)
-    public float $thresholdVotes   = 0.0;        // computed minimum votes needed to reach majority
-    public bool  $hasMajority      = false;      // did someone reach >= threshold?
-    public float $majorityPercent  = 0.0;        // best percent among majority winners (for display)
-    public array $majorityWinners  = [];         // candidate ids that met threshold
+    public int   $totalVotes       = 0;
+    public float $thresholdPercent = 50.0;
+    public float $thresholdVotes   = 0.0;
+    public bool  $hasMajority      = false;
+    public float $majorityPercent  = 0.0;
+    public array $majorityWinners  = [];
 
-    /** Members assignment (issue/revoke codes) */
-    public array $assigned  = [];   // [member_id => voter_id]
-    public array $justIssued = [];  // [member_id => plaintext_code] shown once
+    public array $assigned  = [];
+    public array $justIssued = []; 
 
-    /** Paginator name for members table */
     protected string $pageName = 'membersPage';
 
-    /** Select value for “Add Candidate from Members” */
     public ?int $pickMemberId = null;
 
     public bool $showEditModal = false;
@@ -56,6 +54,20 @@ class SessionShow extends Component
     public ?string $editBio = null;
     public ?string $editPhotoUrl = null;
     public ?\Livewire\Features\SupportFileUploads\TemporaryUploadedFile $editPhoto = null; 
+
+    public array $revealed = []; 
+
+    public function revealCode(int $memberId): void
+    {
+        if (! isset($this->assigned[$memberId])) return;
+        $this->revealed[$memberId] = true;
+    }
+
+    public function hideCode(int $memberId): void
+    {
+        unset($this->revealed[$memberId]);
+    }
+
 
     public function mount(Conference $conference, VotingSession $session): void
     {
@@ -68,7 +80,7 @@ class SessionShow extends Component
     /** Clear one-time codes when paging members */
     public function updatedMembersPage(): void
     {
-        $this->reset('justIssued');
+        $this->reset(['justIssued','revealed']);
     }
 
     /** Open session */
@@ -95,7 +107,7 @@ class SessionShow extends Component
             if ($this->session->status !== 'Open') {
                 $this->session->update([
                     'status'     => 'Open',
-                    'start_time' => $this->session->start_time ?? now(),
+                    'start_time' => now(),
                     'end_time'   => null,
                 ]);
                 session()->flash('ok', 'Session opened.');
@@ -184,7 +196,7 @@ class SessionShow extends Component
                 Cache::forget("voter_code_enc:{$existingCurrent->id}");
                 $existingCurrent->delete();
             }
-            unset($this->justIssued[$memberId]);
+            unset($this->justIssued[$memberId], $this->revealed[$memberId]);
         }
 
         $this->session->refresh();
@@ -365,6 +377,7 @@ class SessionShow extends Component
 
     public function render()
     {
+        $this->autoCloseIfDue();
         // Keep candidates snapshot in sync every render
         $this->rebuildCandidatesPanel();
 
@@ -378,11 +391,14 @@ class SessionShow extends Component
             ->all();
 
         $codesByMember = [];
+        
+        foreach (array_keys($this->revealed) as $memberId) {
+            if (! isset($this->assigned[$memberId])) continue;
+            $voterId = $this->assigned[$memberId];
 
-        foreach ($this->assigned as $memberId => $voterId) {
-            $enc = Cache::get("voter_code_enc:{$voterId}");
+            $enc = \Cache::get("voter_code_enc:{$voterId}");
             if ($enc) {
-                try { $codesByMember[$memberId] = Crypt::decryptString($enc); }
+                try { $codesByMember[$memberId] = \Crypt::decryptString($enc); }
                 catch (\Throwable $e) { $codesByMember[$memberId] = null; }
             } else {
                 $codesByMember[$memberId] = null;
@@ -489,5 +505,36 @@ class SessionShow extends Component
         $this->resetValidation();
     }
 
+    protected function autoCloseIfDue(): void
+    {
+        // Only for Open + Timer sessions with a set start_time and minutes
+        if (
+            $this->session->status === 'Open'
+            && $this->session->close_condition === 'Timer'
+            && $this->session->start_time
+            && $this->session->close_after_minutes
+        ) {
+            $deadline = Carbon::parse($this->session->start_time)
+                ->addMinutes((int) $this->session->close_after_minutes);
 
+            if (now()->greaterThanOrEqualTo($deadline)) {
+                DB::transaction(function () {
+                    // Double-check under lock to avoid races if multiple tabs are open
+                    $s = \App\Models\VotingSession::whereKey($this->session->id)
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($s && $s->status === 'Open') {
+                        $s->update([
+                            'status'   => 'Closed',
+                            'end_time' => now(),
+                        ]);
+                    }
+                });
+
+                $this->session->refresh();
+                session()->flash('ok', 'Session auto-closed by timer.');
+            }
+        }
+    }
 }

@@ -18,11 +18,9 @@ class SessionExportController extends Controller
 {
     public function download(Conference $conference, VotingSession $session)
     {
-        // 0) Guards
         abort_unless($session->conference_id === $conference->id, 404);
         $session->load(['position', 'conference']);
 
-        // 1) Fetch data
         $candidates = \App\Models\Candidate::with('member')
             ->where('position_id', $session->position_id)
             ->withCount([
@@ -31,6 +29,9 @@ class SessionExportController extends Controller
             ->orderByDesc('votes_count')
             ->orderBy('id')
             ->get();
+
+        $totalVotes = (int) $candidates->sum('votes_count');
+        $majorityPercent = $session->majority_percent ?? null;
 
         $winnerNames = [];
         if ($session->status === 'Closed' || !is_null($session->end_time)) {
@@ -42,40 +43,29 @@ class SessionExportController extends Controller
             }
         }
 
-        // 2) Ensure PHPWord uses a writable temp directory
         $tmpDir = storage_path('app/phpword-temp');
         if (! is_dir($tmpDir)) @mkdir($tmpDir, 0775, true);
         \PhpOffice\PhpWord\Settings::setTempDir($tmpDir);
 
-        // Helper to strip control chars / invalid Unicode that can trip XML
-        // Replace your $clean with this:
         $clean = function ($s) {
             $s = (string)$s;
 
-            // Normalize to NFC if intl is available (avoids weird combining sequences)
             if (class_exists(\Normalizer::class) && \Normalizer::isNormalized($s, \Normalizer::NFC) === false) {
                 $s = \Normalizer::normalize($s, \Normalizer::NFC);
             }
-
-            // Strip characters not allowed by XML 1.0:
-            // Allowed ranges: 0x9 | 0xA | 0xD | 0x20-0xD7FF | 0xE000-0xFFFD
-            // (We also remove UTF-16 surrogate range 0xD800-0xDFFF which is illegal in XML 1.0.)
             $s = preg_replace(
                 '/(?!' .
-                    '\x09' .                 // TAB
-                    '|\x0A' .                // LF
-                    '|\x0D' .                // CR
-                    '|[\x20-\x{D7FF}]' .     // Basic Multilingual Plane up to before surrogates
-                    '|[\x{E000}-\x{FFFD}]' . // Private use area to BMP end
+                    '\x09' .
+                    '|\x0A' .
+                    '|\x0D' .
+                    '|[\x20-\x{D7FF}]' .
+                    '|[\x{E000}-\x{FFFD}]' .
                 ')/u',
                 '',
                 $s
             );
 
-            // Fallback: if regex failed (rare invalid UTF-8), force to UTF-8 cleanly:
             if ($s === null) $s = '';
-
-            // Optionally trim super-long runs that sometimes trip Word
             if (strlen($s) > 2000) {
                 $s = substr($s, 0, 2000) . '…';
             }
@@ -83,8 +73,6 @@ class SessionExportController extends Controller
             return $s;
         };
 
-
-        // 3) Build the document
         $phpWord = new \PhpOffice\PhpWord\PhpWord();
         $phpWord->setDefaultFontName('Calibri');
         $phpWord->setDefaultFontSize(11);
@@ -97,24 +85,27 @@ class SessionExportController extends Controller
 
         $section = $phpWord->addSection();
 
-        // Title
         $section->addText('Voting Session Report', $titleStyle);
         $section->addTextBreak(1);
 
-        // Header meta (clean all strings before inserting)
         $section->addText('Conference ID: '.$conference->id);
         $section->addText('Session ID: '.$session->id);
         $section->addText('Position: '.$clean(optional($session->position)->name ?? '—'));
         $section->addText('Status: '.$clean($session->status));
         $section->addText('Starts: '.($session->start_time ? $session->start_time->format('Y-m-d H:i') : '—'));
         $section->addText('Ends: '.($session->end_time ? $session->end_time->format('Y-m-d H:i') : '—'));
+        $section->addText('Majority Threshold: ' . (
+            is_numeric($majorityPercent)
+                ? rtrim(rtrim(number_format((float)$majorityPercent, 2, '.', ''), '0'), '.') . '%'
+                : '—'
+        ));
         $section->addTextBreak(1);
 
         $section->addText('Candidates and Votes');
         $table = $section->addTable([
             'borderColor' => '999999',
             'borderSize'  => 6,
-            'cellMargin'  => 80,   // twips; safe across versions
+            'cellMargin'  => 80,
         ]);
 
         $table->addRow();
@@ -129,27 +120,27 @@ class SessionExportController extends Controller
             $table->addCell(2000)->addText((string) ($c->votes_count ?? 0));
         }
 
+        $table->addRow();
+        $table->addCell(7000)->addText('Total', ['bold' => true]);
+        $table->addCell(2000)->addText((string) $totalVotes, ['bold' => true]);
+
         if (!empty($winnerNames)) {
             $section->addTextBreak(1);
             $section->addText('Winner(s): '.$clean(implode(', ', $winnerNames)), ['bold' => true]);
         }
 
         if ($session->status === 'Closed' || !is_null($session->end_time)) {
-            // Prepare labels & values
             $labels = $candidates->map(function ($c) {
                 return $c->member->name ?? ($c->name ?? "Candidate #{$c->id}");
             })->all();
 
             $values = $candidates->map(fn ($c) => (int)($c->votes_count ?? 0))->all();
 
-            // Add a heading
             $section->addTextBreak(1);
             $section->addText('Charts', $hStyle);
 
-            // Bar/Column chart: Votes per candidate
             $section->addText('Votes per Candidate', ['bold' => true]);
             $section->addChart('column', $labels, $values, [
-                // Use PhpOffice\PhpWord\Shared\Converter for sizing
                 'width'              => Converter::inchToEmu(6.5),
                 'height'             => Converter::inchToEmu(3.2),
                 'title'              => 'Votes per Candidate',
@@ -157,16 +148,6 @@ class SessionExportController extends Controller
                 'gridY'              => true,
                 'categoryAxisTitle'  => 'Candidates',
                 'valueAxisTitle'     => 'Votes',
-            ]);
-
-            // Pie chart: Share of votes
-            $section->addTextBreak(1);
-            $section->addText('Vote Share', ['bold' => true]);
-            $section->addChart('pie', $labels, $values, [
-                'width'      => Converter::inchToEmu(4.8),
-                'height'     => Converter::inchToEmu(4.8),
-                'title'      => 'Vote Share',
-                'showLegend' => true,
             ]);
         }
         // 4) Write to disk in exports/
