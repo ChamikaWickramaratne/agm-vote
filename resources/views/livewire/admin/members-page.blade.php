@@ -112,8 +112,6 @@
                         <td class="py-2 px-4">{{ $m->title }}</td>
                         <td class="py-2 px-4">{{ $m->first_name }}</td>
                         <td class="py-2 px-4">{{ $m->last_name }}</td>
-                        <td class="py-2 px-4">{{ $m->branch_name }}</td>
-                        <td class="py-2 px-4">{{ $m->member_type }}</td>
                         <td class="py-2 px-4">{{ $m->email }}</td>
                         <td class="py-2 px-4">{{ $m->bio }}</td>
                         <td class="py-2 px-4">
@@ -185,18 +183,6 @@
                     <label class="block text-sm font-medium text-[#4F200D]">Last Name</label>
                     <input type="text" wire:model.defer="editLastName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
                     @error('editLastName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-[#4F200D]">Branch</label>
-                    <input type="text" wire:model.defer="editBranchName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
-                    @error('editBranchName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                </div>
-
-                <div>
-                    <label class="block text-sm font-medium text-[#4F200D]">Member Type</label>
-                    <input type="text" wire:model.defer="editMemberType" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
-                    @error('editMemberType') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                 </div>
 
                 <div>
