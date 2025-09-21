@@ -41,5 +41,9 @@ class VotingSession extends Model
         return $this->hasMany(Candidate::class, 'position_id', 'position_id');
     }
 
-
+    public function sessionCandidates()
+    {
+        return $this->belongsToMany(\App\Models\Candidate::class, 'session_candidates')
+            ->withTimestamps();
+    }
 }

@@ -22,4 +22,10 @@ class Candidate extends Model
     {
         return $this->hasMany(Ballot::class);
     }
+
+    public function sessions()
+    {
+        return $this->belongsToMany(\App\Models\VotingSession::class, 'session_candidates')
+            ->withTimestamps();
+    }
 }
