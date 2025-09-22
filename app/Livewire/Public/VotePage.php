@@ -24,6 +24,8 @@ class VotePage extends Component
 
     public ?string $customCandidateName = null;
 
+    public array $choiceIds = [];
+
     public function mount(VotingSession $session): void
     {
         $voterRowId = session()->get("voter_access.session_{$session->id}");
@@ -32,6 +34,13 @@ class VotePage extends Component
         $session->load('conference');
         abort_if($session->status !== 'Open', 404);
         abort_if(optional($session->conference)->end_date !== null, 404);
+
+        if (($this->session->voting_rules['multiSelect'] ?? false) === true) {
+            $this->choiceId  = null;
+            $this->choiceIds = [];
+        } else {
+            $this->choiceIds = [];
+        }
 
         $this->session = $session;
         if (
@@ -67,6 +76,10 @@ class VotePage extends Component
                 ['name' => $member->name]
             );
 
+            if (! $this->session->sessionCandidates()->whereKey($candidate->id)->exists()) {
+                $this->session->sessionCandidates()->attach($candidate->id);
+            }
+
             $this->pickMemberId = null;
             $this->choiceId = $candidate->id;
             session()->flash('ok', 'Candidate added.');
@@ -86,12 +99,23 @@ class VotePage extends Component
         \Log::info('castVote start', [
             'session_id' => $this->session->id,
             'choiceId'   => $this->choiceId,
+            'choiceIds'  => $this->choiceIds,
         ]);
 
         try {
-            $this->validate([
-                'choiceId' => ['required','integer','exists:candidates,id'],
-            ]);
+            $isMulti = (bool) (($this->session->voting_rules['multiSelect'] ?? false));
+
+            if ($isMulti) {
+                // validate array of candidate IDs
+                $this->validate([
+                    'choiceIds'   => ['required','array','min:1'],
+                    'choiceIds.*' => ['integer','distinct','exists:candidates,id'],
+                ]);
+            } else {
+                $this->validate([
+                    'choiceId' => ['required','integer','exists:candidates,id'],
+                ]);
+            }
 
             $voterRowId = session()->get("voter_access.session_{$this->session->id}");
             if (!$voterRowId) {
@@ -99,13 +123,9 @@ class VotePage extends Component
                 session()->flash('vote_error', 'Your voter session expired. Please re-enter your voter code.');
                 return;
             }
-
             $voter = VoterId::findOrFail($voterRowId);
 
-            $candidate = Candidate::where('id', $this->choiceId)
-                ->where('position_id', $this->session->position_id)
-                ->firstOrFail();
-
+            // session not timed out?
             if (
                 $this->session->close_condition === 'Timer'
                 && $this->session->start_time
@@ -113,24 +133,65 @@ class VotePage extends Component
             ) {
                 $deadline = Carbon::parse($this->session->start_time)->addMinutes($this->session->close_after_minutes);
                 if (now()->gte($deadline)) {
-                    $this->addError('choiceId', 'This voting session has closed.');
+                    $this->addError($isMulti ? 'choiceIds' : 'choiceId', 'This voting session has closed.');
                     return;
                 }
             }
-            DB::transaction(function () use ($voter, $candidate) {
-                Ballot::create([
-                    'voting_session_id' => $this->session->id,
-                    'candidate_id'      => $candidate->id,
-                    'voter_code_hash'   => $voter->voter_code_hash,
-                    'jti_hash'          => null,
-                    'cast_at'           => now(),
-                ]);
-            });
+
+            if ($isMulti) {
+                // ensure ALL selected candidates belong to THIS session
+                $validIds = $this->session->sessionCandidates()
+                    ->whereIn('candidates.id', $this->choiceIds)
+                    ->pluck('candidates.id')
+                    ->all();
+
+                if (count($validIds) !== count($this->choiceIds)) {
+                    $this->addError('choiceIds', 'One or more selected candidates are not in this session.');
+                    return;
+                }
+
+                DB::transaction(function () use ($voter, $validIds) {
+                    // Replace-all semantics: clear previous ballots by this voter in this session,
+                    // then insert one row per selected candidate.
+                    Ballot::where('voting_session_id', $this->session->id)
+                        ->where('voter_code_hash', $voter->voter_code_hash)
+                        ->delete();
+
+                    foreach ($validIds as $cid) {
+                        Ballot::create([
+                            'voting_session_id' => $this->session->id,
+                            'candidate_id'      => $cid,
+                            'voter_code_hash'   => $voter->voter_code_hash,
+                            'jti_hash'          => null,
+                            'cast_at'           => now(),
+                        ]);
+                    }
+                });
+            } else {
+                // single select: ensure the chosen candidate is attached to THIS session
+                $candidate = $this->session->sessionCandidates()
+                    ->where('candidates.id', $this->choiceId)
+                    ->firstOrFail();
+
+                DB::transaction(function () use ($voter, $candidate) {
+                    // Replace-all semantics for single too (keeps counting logic simple)
+                    Ballot::where('voting_session_id', $this->session->id)
+                        ->where('voter_code_hash', $voter->voter_code_hash)
+                        ->delete();
+
+                    Ballot::create([
+                        'voting_session_id' => $this->session->id,
+                        'candidate_id'      => $candidate->id,
+                        'voter_code_hash'   => $voter->voter_code_hash,
+                        'jti_hash'          => null,
+                        'cast_at'           => now(),
+                    ]);
+                });
+            }
 
             \Log::info('castVote success', [
-                'session_id'   => $this->session->id,
-                'candidate_id' => $candidate->id,
-                'voter_id'     => $voter->id,
+                'session_id' => $this->session->id,
+                'voter_id'   => $voter->id,
             ]);
 
             session()->forget("voter_access.session_{$this->session->id}");
@@ -147,11 +208,12 @@ class VotePage extends Component
     }
 
 
+
     public function render()
     {
-        $candidates = Candidate::with('member')
-            ->where('position_id', $this->session->position_id)
-            ->orderBy('id')
+        $candidates = $this->session->sessionCandidates()
+            ->with('member')
+            ->orderBy('candidates.id')
             ->get();
 
         $excludedMemberIds = $candidates->pluck('member_id')->filter()->values();
@@ -195,8 +257,12 @@ class VotePage extends Component
                 []
             );
 
+            if (! $this->session->sessionCandidates()->whereKey($candidate->id)->exists()) {
+                $this->session->sessionCandidates()->attach($candidate->id);
+            }
+
             $this->customCandidateName = null;
-            $this->choiceId = $candidate->id; // preselect
+            $this->choiceId = $candidate->id;
             session()->flash('ok', 'Custom candidate added.');
             \Log::info('Custom candidate added', [
                 'position_id' => $this->session->position_id,

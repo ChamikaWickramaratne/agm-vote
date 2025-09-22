@@ -231,42 +231,37 @@ class SessionShow extends Component
     {
         $role = optional(auth()->user())->role;
         if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
+        if (! $this->session->position_id) { $this->addError('candidates','This session has no position assigned.'); return; }
+        if ($this->session->status === 'Closed') { $this->addError('candidates','This session is closed.'); return; }
 
-        if (! $this->session->position_id) {
-            $this->addError('candidates', 'This session has no position assigned.');
-            return;
-        }
-
-        if ($this->session->status === 'Closed') {
-            $this->addError('candidates', 'This session is closed.');
-            return;
-        }
-
-        $already = Candidate::where('position_id', $this->session->position_id)
+        // 1) Is there already a Candidate row for this position+member?
+        $candidate = \App\Models\Candidate::where('position_id', $this->session->position_id)
             ->where('member_id', $memberId)
-            ->exists();
+            ->first();
 
-        if ($already) {
-            session()->flash('ok', 'Member is already a candidate for this position.');
-            return;
+        if (! $candidate) {
+            $member = \App\Models\Member::findOrFail($memberId);
+            $displayName = trim(($member->first_name ?? '').' '.($member->last_name ?? '')) ?: ($member->name ?? "Member #{$member->id}");
+
+            $candidate = \App\Models\Candidate::create([
+                'position_id' => $this->session->position_id,
+                'member_id'   => $member->id,
+                'name'        => $displayName,
+                'bio'         => $member->bio,
+                'photo_url'   => $member->photo,
+            ]);
         }
 
-        $member = Member::findOrFail($memberId);
-
-        // Build display name from first_name + last_name
-        $fullName = trim(($member->first_name ?? '').' '.($member->last_name ?? ''));
-        $displayName = $fullName !== '' ? $fullName : ($member->name ?? 'Member #'.$member->id);
-
-        Candidate::create([
-            'position_id' => $this->session->position_id,
-            'member_id'   => $member->id,
-            'name'        => $displayName,
-            'bio'         => $member->bio,
-            'photo_url'   => $member->photo,   // assuming member->photo stores a storage path
-        ]);
+        // 2) Attach candidate to THIS session if not already
+        if (! $this->session->sessionCandidates()->whereKey($candidate->id)->exists()) {
+            $this->session->sessionCandidates()->attach($candidate->id);
+            session()->flash('ok', 'Candidate added to this session.');
+        } else {
+            session()->flash('ok', 'Candidate is already in this session.');
+        }
 
         $this->session->refresh();
-        session()->flash('ok', 'Candidate added.');
+        $this->rebuildCandidatesPanel(); // reflect immediately
     }
 
 
@@ -283,35 +278,55 @@ class SessionShow extends Component
             $this->candidateMemberIds  = [];
             $this->winner              = ['max' => 0, 'ids' => []];
             $this->totalVotes          = 0;
-            $this->thresholdPercent    = (float) ($this->session->majority_percent ?? 50.0);
-            $this->thresholdVotes      = 0.0;
-            $this->hasMajority         = false;
-            $this->majorityPercent     = 0.0;
-            $this->majorityWinners     = [];
+            // plurality (null) => 0.0 here; UI can show "plurality"
+            $mp = $this->session->majority_percent; 
+            $this->thresholdPercent = is_null($mp) ? 0.0 : (float) $mp;
+            $this->thresholdVotes   = 0.0;
+            $this->hasMajority      = false;
+            $this->majorityPercent  = 0.0;
+            $this->majorityWinners  = [];
             return;
         }
 
-        $cands = Candidate::query()
+        $cands = $this->session->sessionCandidates()
             ->with('member')
-            ->where('position_id', $posId)
-            ->orderBy('id')
+            ->orderBy('candidates.id')
             ->get();
 
-        $latestPerVoter = DB::table('ballots as b1')
-            ->select(DB::raw('MAX(b1.id) AS max_id'))
-            ->where('b1.voting_session_id', $this->session->id)
-            ->groupBy('b1.voter_code_hash');
+        $multi = (bool) ($this->session->voting_rules['multiSelect'] ?? false);
 
-        $tallies = DB::table('ballots as b')
-            ->joinSub($latestPerVoter, 'lpv', fn($j) => $j->on('b.id', '=', 'lpv.max_id'))
-            ->where('b.voting_session_id', $this->session->id)
-            ->select('b.candidate_id', DB::raw('COUNT(*) AS votes'))
-            ->groupBy('b.candidate_id')
-            ->pluck('votes', 'candidate_id');
+        if ($multi) {
+            // MULTI: each selection is one row; dedupe per candidate per voter
+            $tallies = DB::table('ballots')
+                ->where('voting_session_id', $this->session->id)
+                ->select('candidate_id', DB::raw('COUNT(DISTINCT voter_code_hash) AS votes'))
+                ->groupBy('candidate_id')
+                ->pluck('votes', 'candidate_id');
 
-        $this->totalVotes = (int) $tallies->sum();
-        $this->thresholdPercent = (float) ($this->session->majority_percent ?? 50.0);
-        $this->thresholdVotes   = $this->totalVotes > 0
+            // total selections across all candidates
+            $this->totalVotes = (int) $tallies->sum();
+        } else {
+            // SINGLE: last-vote-wins per voter across the session
+            $latestPerVoter = DB::table('ballots as b1')
+                ->select(DB::raw('MAX(b1.id) AS max_id'))
+                ->where('b1.voting_session_id', $this->session->id)
+                ->groupBy('b1.voter_code_hash');
+
+            $tallies = DB::table('ballots as b')
+                ->joinSub($latestPerVoter, 'lpv', fn($j) => $j->on('b.id', '=', 'lpv.max_id'))
+                ->where('b.voting_session_id', $this->session->id)
+                ->select('b.candidate_id', DB::raw('COUNT(*) AS votes'))
+                ->groupBy('b.candidate_id')
+                ->pluck('votes', 'candidate_id');
+
+            $this->totalVotes = (int) $tallies->sum();
+        }
+
+        // Majority mode handling:
+        // null => plurality (no threshold check)
+        $mp = $this->session->majority_percent; // DECIMAL or null
+        $this->thresholdPercent = is_null($mp) ? 0.0 : (float) $mp;
+        $this->thresholdVotes   = (!is_null($mp) && $this->totalVotes > 0)
             ? ($this->thresholdPercent / 100.0) * $this->totalVotes
             : 0.0;
 
@@ -331,10 +346,10 @@ class SessionShow extends Component
         }
         $this->candidatesWithVotes = $rows;
 
-        // 5) Track which member ids are already candidates (unchanged)
+        // Track which member ids are already candidates
         $this->candidateMemberIds = $cands->pluck('member_id')->filter()->values()->all();
 
-        // 6) Plurality winner(s) from last-vote-wins tallies
+        // Plurality winner(s)
         $maxVotes = empty($rows) ? 0 : max(array_column($rows, 'votes_count'));
         $this->winner = [
             'max' => (int) $maxVotes,
@@ -343,12 +358,12 @@ class SessionShow extends Component
                 : [],
         ];
 
-        // 7) Majority check against last-vote totals
+        // Majority check only if a threshold exists (i.e., not plurality)
         $this->hasMajority     = false;
         $this->majorityPercent = 0.0;
         $this->majorityWinners = [];
 
-        if ($this->totalVotes > 0) {
+        if (!is_null($mp) && $this->totalVotes > 0) {
             foreach ($this->candidatesWithVotes as $row) {
                 if ($row['votes_count'] >= $this->thresholdVotes) {
                     $this->hasMajority = true;
@@ -357,6 +372,7 @@ class SessionShow extends Component
                 }
             }
         }
+
         $this->dispatch(
             'results-updated',
             candidates: $this->candidatesWithVotes,

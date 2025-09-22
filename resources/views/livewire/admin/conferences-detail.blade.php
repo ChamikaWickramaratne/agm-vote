@@ -135,17 +135,35 @@
                     </div>
 
                     <div class="sm:col-span-1">
-                        <label class="block text-sm font-medium">Majority threshold (%)</label>
-                        <input
-                            type="number" step="0.01" min="0" max="100"
-                            wire:model.defer="majority_percent"
-                            class="mt-1 w-full border rounded p-2"
-                            placeholder="e.g. 50"
-                        >
-                        @error('majority_percent') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                        <div class="text-xs text-gray-500 mt-1">
-                            A candidate must reach at least this percent of total ballots in the session to achieve majority.
+                        <label class="block text-sm font-medium">Majority rule</label>
+                        <select wire:model.live="majority_mode" class="mt-1 w-full border rounded p-2">
+                            <option value="simple">Simple majority (≥ 50%)</option>
+                            <option value="two_thirds">2/3 (≈ 66.67%)</option>
+                            <option value="plurality">Plurality (no threshold)</option>
+                            <option value="custom">Custom…</option>
+                        </select>
+                        @error('majority_mode') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+                    </div>
+
+                    @if ($majority_mode === 'custom')
+                        <div class="sm:col-span-1">
+                            <label class="block text-sm font-medium">Custom threshold (%)</label>
+                            <input
+                                type="number" step="0.01" min="0" max="100"
+                                wire:model.defer="majority_custom"
+                                class="mt-1 w-full border rounded p-2"
+                                placeholder="e.g. 55"
+                            >
+                            @error('majority_custom') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                         </div>
+                    @endif
+
+                    <div class="sm:col-span-1">
+                        <label class="block text-sm font-medium">Options</label>
+                        <label class="mt-2 inline-flex items-center gap-2 text-sm">
+                            <input type="checkbox" wire:model.live="multiSelect" class="rounded">
+                            <span>Allow multiple selections</span>
+                        </label>
                     </div>
 
                     @if ($close_condition === 'Timer')
