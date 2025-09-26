@@ -24,7 +24,7 @@
             {{-- Title --}}
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">Title</label>
-                <select wire:model.defer="title" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
+                <select name="title" wire:model.defer="title" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
                     <option value="">-- Select --</option>
                     <option>Mr.</option>
                     <option>Mrs.</option>
@@ -37,7 +37,7 @@
             {{-- First Name --}}
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">First Name</label>
-                <input type="text" wire:model.defer="first_name" 
+                <input name="first_name" type="text" wire:model.defer="first_name" 
                        class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
                 @error('first_name') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
@@ -45,7 +45,7 @@
             {{-- Last Name --}}
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">Last Name</label>
-                <input type="text" wire:model.defer="last_name" 
+                <input name="last_name" type="text" wire:model.defer="last_name" 
                        class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
                 @error('last_name') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
@@ -53,7 +53,7 @@
             {{-- Email --}}
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">Email (optional)</label>
-                <input type="email" wire:model.defer="email" 
+                <input name="email" type="email" wire:model.defer="email" 
                        class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
                 @error('email') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
@@ -61,14 +61,14 @@
             {{-- Bio --}}
             <div class="sm:col-span-2">
                 <label class="block text-sm font-medium text-[#4F200D]">Bio</label>
-                <textarea wire:model.defer="bio" rows="3" 
+                <textarea name="bio" wire:model.defer="bio" rows="3" 
                           class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]"></textarea>
                 @error('bio') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
             <!-- Add under Bio, for example -->
             <div>
             <label class="block text-sm font-medium text-[#4F200D]">Photo</label>
-            <input type="file" wire:model="photoUpload"
+            <input name="photoUpload" type="file" wire:model="photoUpload"
                     accept="image/*"
                     class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
             @error('photoUpload') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
