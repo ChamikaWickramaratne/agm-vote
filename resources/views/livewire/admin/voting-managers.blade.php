@@ -23,21 +23,21 @@
         <form wire:submit="save" class="grid gap-4 sm:grid-cols-2">
             <div class="sm:col-span-1">
                 <label class="block text-sm font-medium text-[#4F200D]">Name</label>
-                <input type="text" wire:model.defer="name"
+                <input name ="name" type="text" wire:model.defer="name"
                     class="mt-1 w-full border border-[#FF9A00] rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-[#FFD93D] focus:border-[#FF9A00]">
                 @error('name') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
 
             <div class="sm:col-span-1">
                 <label class="block text-sm font-medium text-[#4F200D]">Email</label>
-                <input type="email" wire:model.defer="email"
+                <input name ="email" type="email" wire:model.defer="email"
                     class="mt-1 w-full border border-[#FF9A00] rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-[#FFD93D] focus:border-[#FF9A00]">
                 @error('email') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
 
             <div class="sm:col-span-1">
                 <label class="block text-sm font-medium text-[#4F200D]">Password</label>
-                <input type="password" wire:model.defer="password"
+                <input name="password" type="password" wire:model.defer="password"
                     class="mt-1 w-full border border-[#FF9A00] rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-[#FFD93D] focus:border-[#FF9A00]">
                 @error('password') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
