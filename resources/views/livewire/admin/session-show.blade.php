@@ -5,6 +5,7 @@
 </x-slot>
 
 <div class="py-8 max-w-5xl mx-auto sm:px-6 lg:px-8 space-y-6">
+    <div x-data x-on:session-alert.window="alert($event.detail.message)"></div>
     @if (session('ok'))
         <div class="p-3 rounded bg-green-100 text-green-800">{{ session('ok') }}</div>
     @endif
@@ -74,142 +75,168 @@
     </div>
 
     {{-- Candidates & votes --}}
-            <div class="bg-white shadow sm:rounded-lg p-6 space-y-3" wire:poll.10s>
-            <h3 class="font-semibold">Candidates & Votes</h3>
+<div class="bg-white shadow sm:rounded-lg p-6 space-y-3" wire:poll.10s>
+    <h3 class="font-semibold">Candidates & Votes</h3>
 
-            <x-role :roles="['SuperAdmin','Admin','VotingManager']">
-                <div class="mb-4 flex items-center gap-3">
-                    <select
-                        wire:model.live="pickMemberId"
-                        wire:key="pick-member-{{ $session->id }}-{{ $availableMembers->count() }}"
-                        class="border rounded p-2 w-64"
-                    >
-                        <option value="">-- Select member to add as candidate --</option>
-                        @foreach($availableMembers as $m)
-                            <option value="{{ (string) $m->id }}">{{ $m->name }} @if($m->email) ({{ $m->email }}) @endif</option>
-                        @endforeach
-                    </select>
+    <x-role :roles="['SuperAdmin','Admin','VotingManager']">
+        <div class="mb-4 flex items-center gap-3">
+            <select
+                wire:model.live="pickMemberId"
+                wire:key="pick-member-{{ $session->id }}-{{ $availableMembers->count() }}"
+                class="border rounded p-2 w-64"
+            >
+                <option value="">-- Select member to add as candidate --</option>
+                @foreach($availableMembers as $m)
+                    <option value="{{ (string) $m->id }}">{{ $m->name }} @if($m->email) ({{ $m->email }}) @endif</option>
+                @endforeach
+            </select>
 
-                    <button type="button"
-                            wire:click="addCandidateFromSelect"
-                            class="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
-                            @disabled(!$pickMemberId || !$session->position_id || $session->status === 'Closed')>
-                        Add Candidate
-                    </button>
-                </div>
-            </x-role>
+            <button type="button"
+                    wire:click="addCandidateFromSelect"
+                    class="px-3 py-2 rounded bg-indigo-600 text-white hover:bg-indigo-700"
+                    @disabled(!$pickMemberId || !$session->position_id || $session->status === 'Closed')>
+                Add Candidate
+            </button>
+        </div>
+    </x-role>
 
-            @if (empty($candidatesWithVotes))
-                <p class="text-sm text-gray-500">No candidates for this session’s position yet.</p>
-            @else
-                {{-- table --}}
-                <div class="overflow-x-auto">
-                    <table class="min-w-full text-sm">
-                        <thead>
-                            <tr class="text-left border-b">
-                                <th class="py-2 pr-4">Candidate</th>
-                                <th class="py-2 pr-4">Votes</th>
-                                <th class="py-2 pr-4 w-28"></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @foreach ($candidatesWithVotes as $row)
-                                @php
-                                    $isWinner = ($session->status === 'Closed' || $session->end_time)
-                                        && $winner['max'] > 0
-                                        && in_array($row['id'], $winner['ids'], true);
-                                @endphp
-                                <tr class="border-b">
-                                    <td class="py-2 pr-4 @if($isWinner) font-semibold text-green-700 @endif">
-                                        {{ $row['name'] }}
-                                    </td>
-                                    <td class="py-2 pr-4 @if($isWinner) font-semibold text-green-700 @endif">
-                                        {{ $row['votes_count'] }}
-                                    </td>
-                                    <td class="py-2 pr-4">
-                                        <x-role :roles="['SuperAdmin','Admin','VotingManager']">
-                                            @if ($session->status !== 'Closed')
-                                                <button
-                                                    type="button"
-                                                    class="text-indigo-700 hover:underline"
-                                                    wire:click="startEditCandidate({{ $row['id'] }})">
-                                                    Edit
-                                                </button>
-                                            @endif
-                                        </x-role>
-                                    </td>
-                                </tr>
-                            @endforeach
-                        </tbody>
-                    </table>
-                </div>
-
-                {{-- majority banner (unchanged) --}}
-                @if ($session->status === 'Closed')
-                    <div class="mt-3">
+    @if (empty($candidatesWithVotes))
+        <p class="text-sm text-gray-500">No candidates for this session’s position yet.</p>
+    @else
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+                <thead>
+                    <tr class="text-left border-b">
+                        <th class="py-2 pr-4">Candidate</th>
+                        <th class="py-2 pr-4">Votes</th>
+                        <th class="py-2 pr-4 w-28"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($candidatesWithVotes as $row)
                         @php
-                            $maj = $session->majority_percent;
-                            $majFmt = is_null($maj) ? '—'
-                                : rtrim(rtrim(number_format((float)$maj, 2, '.', ''), '0'), '.');
+                            $isWinner = ($session->status === 'Closed' || $session->end_time)
+                                && $winner['max'] > 0
+                                && in_array($row['id'], $winner['ids'], true);
                         @endphp
+                        <tr class="border-b">
+                            <td class="py-2 pr-4 @if($isWinner) font-semibold text-green-700 @endif">
+                                {{ $row['name'] }}
+                            </td>
+                            <td class="py-2 pr-4 @if($isWinner) font-semibold text-green-700 @endif">
+                                {{ $row['votes_count'] }}
+                            </td>
+                            <td class="py-2 pr-4">
+                                <x-role :roles="['SuperAdmin','Admin','VotingManager']">
+                                    @if ($session->status !== 'Closed')
+                                        <button type="button"
+                                                class="text-indigo-700 hover:underline"
+                                                wire:click="startEditCandidate({{ $row['id'] }})">
+                                            Edit
+                                        </button>
+                                    @endif
+                                </x-role>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
 
-                        @if ($winner['max'] > 0 && !empty($winner['ids']))
-                            <div class="inline-block px-3 py-1 rounded bg-green-100 text-green-800">
-                                Winner{{ count($winner['ids']) > 1 ? 's' : '' }}:
-                                <span class="font-semibold">
-                                    {{
-                                        collect($candidatesWithVotes)
+        @if ($session->status === 'Closed')
+            @php
+                $totalVotesDisplay = isset($totalVotes)
+                    ? (int) $totalVotes
+                    : collect($candidatesWithVotes ?? [])->sum('votes_count');
+
+                $maj    = $session->majority_percent;
+                $majFmt = is_null($maj) ? '—' : rtrim(rtrim(number_format((float)$maj, 2, '.', ''), '0'), '.');
+            @endphp
+
+            <div class="text-sm text-gray-600">
+                Total votes cast:
+                <span class="font-semibold">{{ $totalVotesDisplay }}</span>
+            </div>
+
+            <div class="mt-3">
+                @if ($winner['max'] > 0 && $numWinners > 1)
+                    <div class="inline-block px-3 py-1 rounded bg-amber-100 text-amber-800">
+                        <span class="font-semibold">Not determined</span>
+                        <span class="ml-1">— tie between
+                            <span class="font-semibold">
+                                {{
+                                    collect($candidatesWithVotes)
                                         ->whereIn('id', $winner['ids'])
                                         ->pluck('name')
                                         ->join(', ')
-                                    }}
-                                </span>
-                                ({{ $winner['max'] }} vote{{ $winner['max'] === 1 ? '' : 's' }})
-                                <span class="ml-2 text-green-700/80">
-                                    • Majority threshold: <span class="font-semibold">{{ $majFmt }}%</span>
-                                </span>
-                            </div>
-                        @else
-                            <div class="text-sm text-gray-500">No votes cast.</div>
+                                }}
+                            </span>
+                            ({{ $winner['max'] }} vote{{ $winner['max'] === 1 ? '' : 's' }} each)
+                        </span>
+                        @if (!is_null($maj))
+                            <span class="ml-2 text-amber-700/80">
+                                • Majority threshold: <span class="font-semibold">{{ $majFmt }}%</span>
+                            </span>
                         @endif
                     </div>
 
-                    {{-- Charts (rendered only when session is Closed) --}}
-                    @php
-                        $cutVotes = $totalVotes > 0 ? ceil(($thresholdPercent/100) * $totalVotes) : 0;
-                        $barId = 'resultsBar-'.$session->id;
-                        $pieId = 'resultsPie-'.$session->id;
-                    @endphp
-
-                    <div class="text-sm text-gray-600 mt-2">
-                        Majority threshold: <span class="font-semibold">{{ rtrim(rtrim(number_format((float)$thresholdPercent, 2, '.', ''), '0'), '.') }}%</span>
-                        ({{ $cutVotes }} vote{{ $cutVotes === 1 ? '' : 's' }})
+                @elseif ($winner['max'] > 0 && $numWinners === 1)
+                    <div class="inline-block px-3 py-1 rounded bg-green-100 text-green-800">
+                        Winner:
+                        <span class="font-semibold">
+                            {{
+                                collect($candidatesWithVotes)
+                                    ->whereIn('id', $winner['ids'])
+                                    ->pluck('name')
+                                    ->join(', ')
+                            }}
+                        </span>
+                        ({{ $winner['max'] }} vote{{ $winner['max'] === 1 ? '' : 's' }})
+                        @if (!is_null($maj))
+                            <span class="ml-2 text-green-700/80">
+                                • Majority threshold: <span class="font-semibold">{{ $majFmt }}%</span>
+                            </span>
+                        @endif
                     </div>
-
-                    <div class="mt-6 grid gap-6 sm:grid-cols-2" wire:ignore
-                        x-data="resultsCharts()"
-                        x-init="init(@js($candidatesWithVotes), {{ $totalVotes }}, {{ (float) $thresholdPercent }}, '{{ $barId }}', '{{ $pieId }}')">
-                        <div class="bg-white rounded shadow p-4">
-                            <div class="text-sm text-gray-600 mb-2">Votes by candidate (bar)</div>
-                            <canvas id="{{ $barId }}"></canvas>
-                        </div>
-                        <div class="bg-white rounded shadow p-4">
-                            <div class="text-sm text-gray-600 mb-2">Share of total (doughnut)</div>
-                            <canvas id="{{ $pieId }}"></canvas>
-                        </div>
-                    </div>
+                @else
+                    <div class="text-sm text-gray-500">No votes cast.</div>
                 @endif
+            </div>
 
+            @php
+                $cutVotes = $totalVotes > 0 ? ceil(($thresholdPercent/100) * $totalVotes) : 0;
+                $barId = 'resultsBar-'.$session->id;
+                $pieId = 'resultsPie-'.$session->id;
+            @endphp
 
-                @php
-                    $cutVotes = $totalVotes > 0 ? ceil(($thresholdPercent/100) * $totalVotes) : 0;
-                @endphp
-                <div class="text-sm text-gray-600">
-                    Majority threshold: <span class="font-semibold">{{ rtrim(rtrim(number_format((float)$thresholdPercent, 2, '.', ''), '0'), '.') }}%</span>
-                    ({{ $cutVotes }} vote{{ $cutVotes === 1 ? '' : 's' }})
+            <div class="text-sm text-gray-600 mt-2">
+                Majority threshold:
+                <span class="font-semibold">{{ rtrim(rtrim(number_format((float)$thresholdPercent, 2, '.', ''), '0'), '.') }}%</span>
+                ({{ $cutVotes }} vote{{ $cutVotes === 1 ? '' : 's' }})
+            </div>
+
+            <div class="mt-6 grid gap-6 sm:grid-cols-2" wire:ignore
+                 x-data="resultsCharts()"
+                 x-init="init(@js($candidatesWithVotes), {{ $totalVotes }}, {{ (float) $thresholdPercent }}, '{{ $barId }}', '{{ $pieId }}')">
+                <div class="bg-white rounded shadow p-4">
+                    <div class="text-sm text-gray-600 mb-2">Votes by candidate (bar)</div>
+                    <canvas id="{{ $barId }}"></canvas>
                 </div>
-            @endif
+            </div>
+        @endif
+
+        @php
+            $cutVotes = $totalVotes > 0 ? ceil(($thresholdPercent/100) * $totalVotes) : 0;
+        @endphp
+        <div class="text-sm text-gray-600">
+            Majority threshold:
+            <span class="font-semibold">{{ rtrim(rtrim(number_format((float)$thresholdPercent, 2, '.', ''), '0'), '.') }}%</span>
+            ({{ $cutVotes }} vote{{ $cutVotes === 1 ? '' : 's' }})
         </div>
+    @endif
+</div>
+
+
 
     {{-- Members assignment --}}
     <div class="bg-white shadow sm:rounded-lg p-6 space-y-4">

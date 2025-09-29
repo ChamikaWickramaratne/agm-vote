@@ -52,14 +52,13 @@ class ConferencesPanel extends Component
         $q = Conference::query()
             ->when($this->search !== '', function ($qq) {
                 $like = '%'.$this->search.'%';
-                // Adjust if you're on Postgres; this works for SQLite/MySQL
                 $qq->whereRaw(
                     "(strftime('%Y-%m-%d %H:%M', start_date) like ?) or (strftime('%Y-%m-%d %H:%M', end_date) like ?)",
                     [$like, $like]
                 );
             })
-            ->orderByDesc('start_date')
-            ->orderByDesc('id');
+            ->orderByDesc('created_at')   // ✅ newest created conference first
+            ->orderByDesc('id');           // (optional) fallback if created_at is same
 
         $conferences = $q->paginate(12);
 

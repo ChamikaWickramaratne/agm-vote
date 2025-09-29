@@ -55,43 +55,56 @@
 
     {{-- QR code card --}}
     <div
-        x-data="{ open:false }"
+        x-data="qrTools()"
         class="bg-white shadow sm:rounded-lg p-6 mt-6 flex flex-col items-center">
 
         <h3 class="font-semibold mb-3">QR Code for Voters</h3>
 
         {{-- Clickable QR preview --}}
-        <div class="cursor-pointer" @click="open = true">
+        <div class="cursor-pointer" @click="open = true" x-ref="qrSmallWrap">
             {!! QrCode::format('svg')->size(200)->margin(1)
                 ->generate(route('public.conference', $conference->public_token)) !!}
         </div>
-        <div class="text-xs text-gray-500 mt-2">
-            Click QR to enlarge
-        </div>
+        <div class="text-xs text-gray-500 mt-2">Click QR to enlarge</div>
+
         <div class="mt-3 flex items-center gap-2">
+            {{-- keep your SVG download --}}
             <a
-                href="{{ route('admin.conferences.qr.download', ['conference' => $conference->id, 'format' => 'svg']) }}"
+                href="{{ route('admin.conferences.qr.download', ['conference' => $conference->id, 'format' => 'svg', 'size' => 1000, 'margin' => 1]) }}"
                 class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300"
-            >
-                Download SVG
-            </a>
+            >Download SVG</a>
+
+            {{-- new client-side PNG export (no Imagick) --}}
+            <button
+                type="button"
+                class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                @click="downloadPng($refs.qrSmallWrap, 'conference-qr-{{ $conference->id }}.png', 4)"
+            >Download PNG</button>
         </div>
-        {{-- Fullscreen modal --}}
-        <div x-show="open"
-             x-transition
-             class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
-             @click.self="open = false">
+
+        {{-- Fullscreen modal with large QR --}}
+        <div x-show="open" x-transition
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+            @click.self="open = false">
 
             <div class="bg-white p-6 rounded-lg shadow-lg max-w-xl w-full flex flex-col items-center">
                 <h3 class="font-semibold mb-3">Conference QR Code</h3>
-                <div>
+
+                <div x-ref="qrLargeWrap">
                     {!! QrCode::format('svg')->size(500)->margin(1)
                         ->generate(route('public.conference', $conference->public_token)) !!}
                 </div>
-                <button @click="open = false"
-                        class="mt-4 px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">
-                    Close
-                </button>
+
+                <div class="mt-3 flex items-center gap-2">
+                    <button
+                        type="button"
+                        class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300"
+                        @click="downloadPng($refs.qrLargeWrap, 'conference-qr-{{ $conference->id }}-large.png', 4)"
+                    >Download PNG</button>
+
+                    <button @click="open = false"
+                            class="px-4 py-2 rounded bg-red-600 text-white hover:bg-red-700">Close</button>
+                </div>
             </div>
         </div>
     </div>
@@ -130,7 +143,6 @@
                         <select wire:model.live="close_condition" class="mt-1 w-full border rounded p-2">
                             <option value="Manual">Manual</option>
                             <option value="Timer">Timer</option>
-                            <option value="AllVotesCast">AllVotesCast</option>
                         </select>
                     </div>
 
@@ -216,8 +228,9 @@
                         <td class="py-2 pr-4">{{ optional($s->end_time)->format('Y-m-d H:i') ?? '—' }}</td>
                         <td class="py-2 pr-4">
                             <a class="px-3 py-1 rounded bg-gray-200 hover:bg-gray-300"
-                               href="{{ route('system.sessions.show', [$conference, $s]) }}">
-                                View
+                                href="{{ route('system.sessions.show', [$conference, $s]) }}"
+                                target="_blank" rel="noopener noreferrer">
+                                    View
                             </a>
                             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                                 @if (is_null($conference->end_date))
@@ -284,4 +297,69 @@
             </div>
         </div>
     @endif
+    @once
+    <script>
+        function qrTools() {
+        return {
+            open: false,
+
+            /**
+            * Export the FIRST <svg> inside containerEl to PNG (no Imagick).
+            * @param {HTMLElement} containerEl - wrapper containing the inline SVG
+            * @param {string} filename - output filename (e.g. 'qr.png')
+            * @param {number} scale - upscale factor (e.g. 4 = 4x pixels)
+            */
+            downloadPng(containerEl, filename = 'qr.png', scale = 4) {
+            if (!containerEl) return;
+            const svg = containerEl.querySelector('svg');
+            if (!svg) return;
+
+            // Ensure xmlns (so serialization is valid)
+            if (!svg.getAttribute('xmlns')) {
+                svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+            }
+
+            // Determine dimensions from width/height or viewBox
+            let w = parseFloat(svg.getAttribute('width')) || (svg.viewBox?.baseVal?.width ?? 0);
+            let h = parseFloat(svg.getAttribute('height')) || (svg.viewBox?.baseVal?.height ?? 0);
+            if (!w || !h) { w = 500; h = 500; } // sensible fallback
+
+            const exportW = Math.round(w * scale);
+            const exportH = Math.round(h * scale);
+
+            // Serialize SVG
+            const svgString = new XMLSerializer().serializeToString(svg);
+            const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(svgBlob);
+
+            const img = new Image();
+            img.onload = () => {
+                // Draw onto canvas with white background (so PNG isn't transparent)
+                const canvas = document.createElement('canvas');
+                canvas.width = exportW;
+                canvas.height = exportH;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(0, 0, exportW, exportH);
+                ctx.drawImage(img, 0, 0, exportW, exportH);
+
+                canvas.toBlob((blob) => {
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(a.href);
+                URL.revokeObjectURL(url);
+                }, 'image/png');
+            };
+            img.onerror = () => URL.revokeObjectURL(url);
+            img.src = url;
+            }
+        }
+    }
+    </script>
+    @endonce
+
 </div>

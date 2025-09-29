@@ -26,6 +26,7 @@ use App\Livewire\Public\VoteGate;
 use App\Livewire\Public\VotePage;
 use App\Http\Controllers\Admin\SessionExportController;
 use App\Http\Controllers\Admin\ConferenceQrController;
+use App\Livewire\Public\VoteWizard;
 
 /**
  * Landing/dashboard
@@ -168,7 +169,8 @@ Route::middleware(['auth', EnsureRole::class . ':SuperAdmin,Admin,VotingManager'
     });
 
 Route::middleware('web')->group(function () {
-    Route::get('/c/{token}', ConferencePage::class)->name('public.conference');
+    Route::get('/c/{token}', VoteWizard::class)->name('public.conference');
+    // Route::get('/c/{token}', ConferencePage::class)->name('public.conference');
     Route::get('/vote/session/{session}', VoteGate::class)->name('public.vote.gate');
     Route::get('/vote/session/{session}/ballot', VotePage::class)->name('public.vote.page');
 });
