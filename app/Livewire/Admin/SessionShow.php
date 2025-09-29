@@ -54,6 +54,7 @@ class SessionShow extends Component
     public ?string $editBio = null;
     public ?string $editPhotoUrl = null;
     public ?\Livewire\Features\SupportFileUploads\TemporaryUploadedFile $editPhoto = null; 
+    public int $numWinners = 0;
 
     public array $revealed = []; 
 
@@ -100,7 +101,8 @@ class SessionShow extends Component
                 ->exists();
 
             if ($otherOpen) {
-                $this->addError('session', 'Another session in this conference is already open. Close it before opening a new one.');
+                $this->addError('session_open', 'Another session in this conference is already open. Close it before opening a new one.');
+                $this->dispatch('session-alert', message: 'Another session is already open in this conference. Close it before opening a new one.');
                 return;
             }
 
@@ -278,13 +280,13 @@ class SessionShow extends Component
             $this->candidateMemberIds  = [];
             $this->winner              = ['max' => 0, 'ids' => []];
             $this->totalVotes          = 0;
-            // plurality (null) => 0.0 here; UI can show "plurality"
-            $mp = $this->session->majority_percent; 
+            $mp = $this->session->majority_percent;
             $this->thresholdPercent = is_null($mp) ? 0.0 : (float) $mp;
             $this->thresholdVotes   = 0.0;
             $this->hasMajority      = false;
             $this->majorityPercent  = 0.0;
             $this->majorityWinners  = [];
+            $this->numWinners       = 0;                 // ← add this
             return;
         }
 
@@ -296,17 +298,14 @@ class SessionShow extends Component
         $multi = (bool) ($this->session->voting_rules['multiSelect'] ?? false);
 
         if ($multi) {
-            // MULTI: each selection is one row; dedupe per candidate per voter
             $tallies = DB::table('ballots')
                 ->where('voting_session_id', $this->session->id)
                 ->select('candidate_id', DB::raw('COUNT(DISTINCT voter_code_hash) AS votes'))
                 ->groupBy('candidate_id')
                 ->pluck('votes', 'candidate_id');
 
-            // total selections across all candidates
             $this->totalVotes = (int) $tallies->sum();
         } else {
-            // SINGLE: last-vote-wins per voter across the session
             $latestPerVoter = DB::table('ballots as b1')
                 ->select(DB::raw('MAX(b1.id) AS max_id'))
                 ->where('b1.voting_session_id', $this->session->id)
@@ -322,9 +321,7 @@ class SessionShow extends Component
             $this->totalVotes = (int) $tallies->sum();
         }
 
-        // Majority mode handling:
-        // null => plurality (no threshold check)
-        $mp = $this->session->majority_percent; // DECIMAL or null
+        $mp = $this->session->majority_percent;
         $this->thresholdPercent = is_null($mp) ? 0.0 : (float) $mp;
         $this->thresholdVotes   = (!is_null($mp) && $this->totalVotes > 0)
             ? ($this->thresholdPercent / 100.0) * $this->totalVotes
@@ -346,7 +343,6 @@ class SessionShow extends Component
         }
         $this->candidatesWithVotes = $rows;
 
-        // Track which member ids are already candidates
         $this->candidateMemberIds = $cands->pluck('member_id')->filter()->values()->all();
 
         // Plurality winner(s)
@@ -357,8 +353,9 @@ class SessionShow extends Component
                 ? array_column(array_filter($rows, fn($r) => $r['votes_count'] === $maxVotes), 'id')
                 : [],
         ];
+        $this->numWinners = count($this->winner['ids']); // ← add this
 
-        // Majority check only if a threshold exists (i.e., not plurality)
+        // Majority (only if threshold set)
         $this->hasMajority     = false;
         $this->majorityPercent = 0.0;
         $this->majorityWinners = [];
@@ -380,6 +377,7 @@ class SessionShow extends Component
             thresholdPercent: $this->thresholdPercent
         );
     }
+
 
     protected function generateCode(int $len = 6): string
     {
