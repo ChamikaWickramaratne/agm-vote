@@ -38,7 +38,7 @@
             <div class="hidden sm:flex sm:items-center sm:ml-6">
                 <x-dropdown align="right" width="48">
                     <x-slot name="trigger">
-                        <button
+                        <button dusk="user-menu-button"
                             class="inline-flex items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-[#4F200D] bg-[#FFD93D] hover:bg-[#FF9A00] hover:text-white focus:outline-none transition duration-300 ease-in-out transform hover:scale-105">
                             <div>{{ Auth::user()->name }}</div>
                             <div class="ml-1">

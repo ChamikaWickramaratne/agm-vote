@@ -120,15 +120,20 @@
                             @endif
                         </td>
                         <td class="py-2 px-4 space-x-2">
-                            <button wire:click="startEdit({{ $m->id }})"
-                                    class="px-3 py-1 rounded-lg bg-[#4F200D] text-white hover:bg-[#FF9A00] transition">
-                                ✏️ Edit
-                            </button>
-                            <button wire:click="delete({{ $m->id }})"
-                                    onclick="return confirm('Delete this member?')"
-                                    class="px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition">
-                                🗑️ Delete
-                            </button>
+                        <button dusk="edit-member"
+                                wire:click="startEdit({{ $m->id }})"
+                                class="px-3 py-1 rounded-lg bg-[#4F200D] text-white hover:bg-[#FF9A00] transition">
+                            ✏️ Edit
+                        </button>
+
+                        <button dusk="delete-member"
+                                wire:click="delete({{ $m->id }})"
+                                onclick="return confirm('Delete this member?')"
+                                class="px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition">
+                            🗑️ Delete
+                        </button>
+
+
                         </td>
                     </tr>
                 @empty
@@ -175,25 +180,25 @@
 
                 <div>
                     <label class="block text-sm font-medium text-[#4F200D]">First Name</label>
-                    <input type="text" wire:model.defer="editFirstName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    <input dusk="edit-first-name" type="text" wire:model.defer="editFirstName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
                     @error('editFirstName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-[#4F200D]">Last Name</label>
-                    <input type="text" wire:model.defer="editLastName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    <input dusk="edit-last-name" type="text" wire:model.defer="editLastName" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
                     @error('editLastName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                 </div>
 
                 <div>
                     <label class="block text-sm font-medium text-[#4F200D]">Email</label>
-                    <input type="email" wire:model.defer="editEmail" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
+                    <input dusk="edit-email" type="email" wire:model.defer="editEmail" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
                     @error('editEmail') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                 </div>
 
                 <div class="sm:col-span-2">
                     <label class="block text-sm font-medium text-[#4F200D]">Bio</label>
-                    <textarea rows="3" wire:model.defer="editBio" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2"></textarea>
+                    <textarea dusk="edit-bio" rows="3" wire:model.defer="editBio" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2"></textarea>
                     @error('editBio') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                 </div>
 
