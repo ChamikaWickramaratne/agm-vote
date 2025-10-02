@@ -8,7 +8,7 @@
 
     {{-- Flash Messages --}}
     @if (session('ok'))
-        <div class="p-3 rounded-lg bg-[#FFD93D] text-[#4F200D] font-medium shadow-sm">
+        <div dusk="flash-message"class="p-3 rounded-lg bg-[#FFD93D] text-[#4F200D] font-medium shadow-sm">
             {{ session('ok') }}
         </div>
     @endif
@@ -43,7 +43,7 @@
             </div>
 
             <div class="sm:col-span-2">
-                <button type="submit"
+                <button dusk="Create-Voting-Manager" type="submit"
                     class="inline-flex items-center px-5 py-2 bg-[#FFD93D] text-[#4F200D] font-semibold rounded-lg shadow hover:bg-[#FF9A00] hover:text-white transition transform hover:scale-105">
                     Create Voting Manager
                 </button>
@@ -76,6 +76,7 @@
                         <td class="py-2 px-4">
                             <div class="flex gap-2">
                                 <button
+                                    dusk="edit-vm" 
                                     type="button"
                                     wire:click="openEdit({{ $vm->id }})"
                                     class="px-3 py-1 rounded-lg bg-[#FFD93D] text-[#4F200D] font-medium hover:bg-[#FF9A00] hover:text-white transition"
@@ -84,6 +85,7 @@
                                 </button>
 
                                 <button
+                                    dusk="delete-vm"
                                     type="button"
                                     wire:click="confirmDelete({{ $vm->id }})"
                                     class="px-3 py-1 rounded-lg bg-red-100 text-red-700 font-medium hover:bg-red-500 hover:text-white transition"
@@ -116,14 +118,14 @@
         <div class="grid gap-4">
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">Name</label>
-                <input type="text" wire:model.defer="editName"
+                <input dusk="edit-vm-name" type="text" wire:model.defer="editName"
                        class="mt-1 w-full border border-[#FF9A00] rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-[#FFD93D] focus:border-[#FF9A00]">
                 @error('editName') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
 
             <div>
                 <label class="block text-sm font-medium text-[#4F200D]">Email</label>
-                <input type="email" wire:model.defer="editEmail"
+                <input dusk="edit-vm-email" type="email" wire:model.defer="editEmail"
                        class="mt-1 w-full border border-[#FF9A00] rounded-lg p-2 focus:outline-none focus:ring-2 focus:ring-[#FFD93D] focus:border-[#FF9A00]">
                 @error('editEmail') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
@@ -134,7 +136,7 @@
                     class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
                 Cancel
             </button>
-            <button type="button" wire:click="update"
+            <button dusk="edit-vm-email" type="button" wire:click="update"
                     class="px-5 py-2 rounded-lg bg-[#FFD93D] text-[#4F200D] font-semibold hover:bg-[#FF9A00] hover:text-white transition">
                 Save Changes
             </button>
@@ -159,7 +161,7 @@
                     class="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition">
                 Cancel
             </button>
-            <button type="button" wire:click="deleteConfirmed"
+            <button dusk="confirm-delete-vm" type="button" wire:click="deleteConfirmed"
                     class="px-5 py-2 rounded-lg bg-red-500 text-white font-semibold hover:bg-red-600 transition">
                 Delete
             </button>
