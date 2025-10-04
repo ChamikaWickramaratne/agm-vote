@@ -15,6 +15,87 @@
         </div>
     @endif
 
+    {{-- Bulk Import --}}
+    <div class="bg-[#F6F1E9] shadow-md rounded-2xl p-8 border border-[#FFD93D]">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="font-bold text-lg text-[#4F200D]">📥 Bulk Member Import (CSV)</h3>
+            <a href="{{ route('admin.members.template') }}" class="text-blue-600 underline">
+                Download CSV template
+            </a>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-[#4F200D]">Upload CSV</label>
+                <input type="file" wire:model="importFile" accept=".csv,text/csv"
+                    class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]">
+                @error('importFile') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
+            </div>
+            <div class="flex items-end">
+                <label class="inline-flex items-center space-x-2">
+                    <input type="checkbox" wire:model="dryRun">
+                    <span>validate csv</span>
+                </label>
+            </div>
+        </div>
+
+        <div class="mt-4 flex items-center gap-3">
+            <button wire:click="import" wire:loading.attr="disabled"
+                    class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">
+                Import
+            </button>
+            <div wire:loading>Processing…</div>
+        </div>
+
+        @if ($progress > 0)
+            <div class="mt-4">
+                <div class="h-3 rounded bg-gray-200 overflow-hidden">
+                    <div class="h-3 bg-green-500" style="width: {{ $progress }}%"></div>
+                </div>
+                <div class="text-sm text-gray-600 mt-1">{{ $progress }}%</div>
+            </div>
+        @endif
+
+        <div class="mt-6">
+            <h4 class="font-semibold text-[#4F200D] mb-2">Report</h4>
+            <dl class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div><dt class="text-gray-500 text-sm">Total</dt><dd class="font-medium">{{ $report['total'] }}</dd></div>
+                <div><dt class="text-gray-500 text-sm">Valid</dt><dd class="font-medium">{{ $report['valid'] }}</dd></div>
+                <div><dt class="text-gray-500 text-sm">Created</dt><dd class="font-medium">{{ $report['created'] }}</dd></div>
+                <div><dt class="text-gray-500 text-sm">Skipped</dt><dd class="font-medium">{{ $report['skipped'] }}</dd></div>
+            </dl>
+
+            @if (!empty($report['errors']))
+                <div class="mt-4">
+                    <h5 class="font-medium mb-2">Errors</h5>
+                    <div class="max-h-64 overflow-auto border rounded">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left">Row</th>
+                                    <th class="px-3 py-2 text-left">Message</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($report['errors'] as $e)
+                                    <tr class="border-t">
+                                        <td class="px-3 py-2">{{ $e['row'] }}</td>
+                                        <td class="px-3 py-2">{{ $e['message'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <button wire:click="downloadErrors"
+                            class="mt-3 px-3 py-2 border rounded hover:bg-gray-50">
+                        Download error CSV
+                    </button>
+                </div>
+            @endif
+        </div>
+    </div>
+
     {{-- Create --}}
     <div class="bg-[#F6F1E9] shadow-md rounded-2xl p-8 border border-[#FFD93D]">
         <h3 class="font-bold text-lg text-[#4F200D] mb-6">➕ Add Member</h3>

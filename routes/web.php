@@ -217,4 +217,18 @@ Route::middleware(['auth']) // add any role/guard middleware you already use
     ->name('admin.conferences.qr.download');
 
 
+Route::get('/admin/members/template', function () {
+    $csv = implode("\n", [
+        'title,first_name,last_name,email,bio',
+        'Mr.,Jane,Doe,jane@example.com,Short bio here',
+        'Ms,Sam,Lee,,',
+    ])."\n";
+
+    return response()->streamDownload(
+        fn() => print($csv),
+        'members_template.csv',
+        ['Content-Type' => 'text/csv; charset=UTF-8']
+    );
+})->middleware(['auth','verified'])->name('admin.members.template');
+
 require __DIR__ . '/auth.php';
