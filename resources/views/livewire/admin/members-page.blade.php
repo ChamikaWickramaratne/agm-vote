@@ -272,7 +272,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-[#4F200D]">Email</label>
+                    <label class="block text-sm font-medium text-[#4F200D]">Email (Optional)</label>
                     <input dusk="edit-email" type="email" wire:model.defer="editEmail" class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
                     @error('editEmail') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                 </div>
@@ -284,7 +284,7 @@
                 </div>
 
                 <div>
-                    <label class="block text-sm font-medium text-[#4F200D]">Photo</label>
+                    <label class="block text-sm font-medium text-[#4F200D]">Photo (Optional)</label>
                     <input type="file" wire:model="editPhotoUpload" accept="image/*"
                         class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2">
                     @error('editPhotoUpload') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror>

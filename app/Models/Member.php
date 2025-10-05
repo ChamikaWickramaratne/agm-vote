@@ -17,4 +17,11 @@ class Member extends Model {
         'name',
     ];
     public function voterIds(){ return $this->hasMany(VoterId::class); }
+    public function conferences()
+    {
+        return $this->belongsToMany(\App\Models\Conference::class, 'conference_members')
+            ->withTimestamps()
+            ->withPivot('checked_in_at');
+    }
+
 }

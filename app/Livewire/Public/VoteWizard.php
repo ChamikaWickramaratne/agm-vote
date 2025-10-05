@@ -87,17 +87,25 @@ class VoteWizard extends Component
 
         abort_unless($this->session, 404);
 
-        $candidates = VoterId::where('voting_session_id', $this->session->id)
-            ->where('used', false)
-            ->get();
+        // Look up all conference-level codes and match by hash
+        $rows = VoterId::where('conference_id', $this->conference->id)->get(['id','voter_code_hash']);
 
         $match = null;
-        foreach ($candidates as $v) {
+        foreach ($rows as $v) {
             if (Hash::check($this->code, $v->voter_code_hash)) {
                 $match = $v;
                 break;
             }
         }
+
+        if (!$match) {
+            $this->addError('code', 'Invalid code for this conference.');
+            return;
+        }
+
+        // Gate access for just *this* session using the matched conference-level code row
+        session()->put("voter_access.session_{$this->session->id}", $match->id);
+
 
         if (!$match) {
             $this->addError('code', 'Invalid or already used code.');

@@ -32,9 +32,17 @@ class ConferencesDetail extends Component
 
     public ?float $majority_percent = 50.00;
 
+    public ?int $selectedSessionId = null;
+
     public function mount(Conference $conference): void
     {
-        $this->conference = $conference;
+        $this->conference = $conference->load('sessions.position');
+
+        // default: latest Open > latest Pending > latest
+        $this->selectedSessionId =
+            $this->conference->sessions()->where('status','Open')->orderByDesc('id')->value('id')
+            ?? $this->conference->sessions()->where('status','Pending')->orderByDesc('id')->value('id')
+            ?? $this->conference->sessions()->orderByDesc('id')->value('id');
     }
 
     public function endConference(): void

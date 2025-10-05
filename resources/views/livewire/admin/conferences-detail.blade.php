@@ -254,6 +254,9 @@
             </table>
         </div>
     </div>
+    
+    {{-- Conference-wide member assignment & codes --}}
+    @livewire('admin.conference-members', ['conference' => $conference], key('conf-members-'.$conference->id))
 
     {{-- Create Position Modal (Livewire-controlled) --}}
     @if ($this->showPositionModal)

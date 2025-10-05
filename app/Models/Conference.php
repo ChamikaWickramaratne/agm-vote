@@ -25,4 +25,11 @@ class Conference extends Model {
                     $qq->whereNull('start_date')->orWhere('start_date','<=',now());
                 });
     }
+
+    public function members()
+    {
+        return $this->belongsToMany(\App\Models\Member::class, 'conference_members')
+            ->withTimestamps()
+            ->withPivot('checked_in_at');
+    }
 }
