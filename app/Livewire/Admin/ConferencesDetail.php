@@ -14,27 +14,28 @@ class ConferencesDetail extends Component
 {
     public Conference $conference;
 
-    // Create-session form fields
     public ?int $position_id = null;
     public ?string $session_starts_at = null;
-    public ?string $close_condition = 'Manual'; // optional
-    public array $voting_rules = [];            // optional
-    // Add a public property
+    public ?string $close_condition = 'Manual';
+    public array $voting_rules = [];
     public ?int $close_after_minutes = null;
-
     public bool $showPositionModal = false;
     public string $newPositionName = '';
     public ?string $newPositionDescription = null;
     public ?int $newPositionRegionId = null;
     public bool $multiSelect = false;
-    public string $majority_mode = 'simple';   // 'simple' | 'two_thirds' | 'plurality' | 'custom'
+    public string $majority_mode = 'simple';
     public ?float $majority_custom = null;
-
     public ?float $majority_percent = 50.00;
+    public ?int $selectedSessionId = null;
 
     public function mount(Conference $conference): void
     {
-        $this->conference = $conference;
+        $this->conference = $conference->load('sessions.position');
+        $this->selectedSessionId =
+            $this->conference->sessions()->where('status','Open')->orderByDesc('id')->value('id')
+            ?? $this->conference->sessions()->where('status','Pending')->orderByDesc('id')->value('id')
+            ?? $this->conference->sessions()->orderByDesc('id')->value('id');
     }
 
     public function endConference(): void
@@ -84,7 +85,6 @@ class ConferencesDetail extends Component
             'region_id'   => $this->newPositionRegionId,
         ]);
 
-        // auto-select the newly created position for the form
         $this->position_id = $pos->id;
         $this->showPositionModal = false;
 
@@ -117,9 +117,9 @@ class ConferencesDetail extends Component
         }
 
         $majorityPercent = match ($this->majority_mode) {
-            'simple'     => 50.00,           // NOTE: ">= 50%" by your current check
-            'two_thirds' => 66.67,           // nice presentation value; DB is DECIMAL(5,2)
-            'plurality'  => null,            // no majority threshold
+            'simple'     => 50.00,
+            'two_thirds' => 66.67,
+            'plurality'  => null,
             'custom'     => (float) $this->majority_custom,
             default      => 50.00,
         };
@@ -134,7 +134,6 @@ class ConferencesDetail extends Component
             'majority_percent'    => $majorityPercent,
         ]);
 
-        // reset form
         $this->reset([
             'position_id','session_starts_at','close_condition','close_after_minutes',
             'voting_rules','majority_percent','multiSelect','majority_mode','majority_custom'
@@ -146,7 +145,7 @@ class ConferencesDetail extends Component
 
     public function render()
     {
-        $this->conference->load(['sessions.position']); // eager load for view
+        $this->conference->load(['sessions.position']);
         $positions = Position::orderBy('name')->get(['id','name']);
 
         return view('livewire.admin.conferences-detail', compact('positions'));
@@ -159,11 +158,9 @@ class ConferencesDetail extends Component
             abort(403);
         }
 
-        // Ensure the session belongs to this conference
         $original = \App\Models\VotingSession::where('conference_id', $this->conference->id)
             ->findOrFail($sessionId);
 
-        // Duplicate with same settings; reset timing/status
         $new = $original->replicate();
         $new->status = 'Pending';
         $new->start_time = null;

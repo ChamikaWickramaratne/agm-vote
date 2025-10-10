@@ -6,7 +6,7 @@ use App\Models\Conference;
 use Livewire\Attributes\Layout;
 use Livewire\Component;
 
-#[Layout('layouts.app')] // reuse your app layout; no auth middleware used
+#[Layout('layouts.app')]
 class ConferencePage extends Component
 {
     public Conference $conference;
@@ -18,7 +18,6 @@ class ConferencePage extends Component
         $this->conference = $conf->load(['sessions.position']);
     }
 
-    // called by wire:poll to pull fresh DB state
     public function refreshData(): void
     {
         $this->conference->refresh();

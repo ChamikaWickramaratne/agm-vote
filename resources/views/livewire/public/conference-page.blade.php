@@ -89,7 +89,6 @@ function countdown(initial){
             const s = Math.max(0, this.remaining);
             const m = Math.floor(s / 60);
             const sec = s % 60;
-            // Format as mm:ss (no hours)
             this.formatted =
                 String(m).padStart(2, '0') + ':' +
                 String(sec).padStart(2, '0');

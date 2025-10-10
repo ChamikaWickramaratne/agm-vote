@@ -4,7 +4,7 @@
             <!-- Logo -->
             <div class="flex-shrink-0 flex items-center">
                 <a href="{{ route('dashboard') }}">
-                    <x-application-logo class="h-9 w-auto fill-[#4F200D]" />
+                    <h3> Home </h3>
                 </a>
             </div>
 

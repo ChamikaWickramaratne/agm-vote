@@ -68,7 +68,7 @@
             </thead>
             <tbody>
                 @forelse($vms as $vm)
-                    <tr class="bg-white even:bg-[#FFF8E1] hover:bg-[#FFECB3] transition">
+                    <tr class="bg-white even:bg-[#FFF8E1] hover:bg-[#FFECB3] transition" wire:key="vm-row-{{ $vm->id }}">
                         <td class="py-2 px-4">{{ $vm->id }}</td>
                         <td class="py-2 px-4">{{ $vm->name }}</td>
                         <td class="py-2 px-4">{{ $vm->email }}</td>

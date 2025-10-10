@@ -3,6 +3,7 @@
 namespace App\Livewire\Admin;
 
 use App\Models\Member;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Layout;
@@ -77,6 +78,19 @@ class MembersPage extends Component
 
     public bool $showEditModal = false;
 
+    // ---------- Bulk Import state ----------
+    /** @var \Livewire\Features\SupportFileUploads\TemporaryUploadedFile|null */
+    public $importFile = null;
+    public bool $dryRun = true;
+    public int $progress = 0; // 0..100
+    public array $report = [
+        'total'   => 0,
+        'valid'   => 0,
+        'created' => 0,
+        'skipped' => 0,
+        'errors'  => [], // [ ['row'=>3,'message'=>'...'], ... ]
+    ];
+
     // Reset pagination when searching
     public function updatedSearch(): void
     {
@@ -85,16 +99,21 @@ class MembersPage extends Component
 
     public function save(): void
     {
-        // Validate new fields
         $this->validate([
             'title'       => ['nullable','string','in:Mr.,Mrs.,Miss,Ms'],
-            'first_name'  => ['required','string','min:2','max:255'],
+            'first_name'  => [
+                'required','string','min:2','max:255',
+                Rule::unique('members', 'first_name')
+                    ->where(fn($q) => $q->where('last_name', $this->last_name)),
+            ],
             'last_name'   => ['required','string','min:2','max:255'],
             'branch_name' => ['nullable','string','max:255'],
             'member_type' => ['nullable','string','max:255'],
             'email'       => ['nullable','email','max:255','unique:members,email'],
             'bio'         => ['nullable','string','max:2000'],
             'photoUpload' => ['nullable','image','max:2048'],
+        ], [
+            'first_name.unique' => 'A member with this first and last name already exists.',
         ]);
 
         $photoPath = null;
@@ -159,7 +178,12 @@ class MembersPage extends Component
 
         $this->validate([
             'editTitle'      => ['nullable','string','in:Mr.,Mrs.,Miss,Ms'],
-            'editFirstName'  => ['required','string','min:2','max:255'],
+            'editFirstName'  => [
+                'required','string','min:2','max:255',
+                Rule::unique('members', 'first_name')
+                    ->ignore($this->editingId)
+                    ->where(fn($q) => $q->where('last_name', $this->editLastName)),
+            ],
             'editLastName'   => ['required','string','min:2','max:255'],
             'editBranchName' => ['nullable','string','max:255'],
             'editMemberType' => ['nullable','string','max:255'],
@@ -169,14 +193,14 @@ class MembersPage extends Component
             ],
             'editBio'        => ['nullable','string','max:2000'],
             'editPhotoUpload'=> ['nullable','image','max:2048'],
+        ], [
+            'editFirstName.unique' => 'A member with this first and last name already exists.',
         ]);
 
         $m = Member::findOrFail($this->editingId);
 
-        // Handle new photo upload (optional)
         if ($this->editPhotoUpload) {
             $newPath = $this->editPhotoUpload->store('members', 'public');
-            // Optionally delete old file
             if ($m->photo && Storage::disk('public')->exists($m->photo)) {
                 Storage::disk('public')->delete($m->photo);
             }
@@ -203,13 +227,265 @@ class MembersPage extends Component
     public function delete(int $id): void
     {
         $m = Member::findOrFail($id);
-        // optionally remove stored photo
         if ($m->photo && Storage::disk('public')->exists($m->photo)) {
             Storage::disk('public')->delete($m->photo);
         }
         $m->delete();
 
         session()->flash('ok', 'Member deleted.');
+    }
+
+    public function downloadTemplate()
+    {
+        $csv = implode("\n", [
+            'title,first_name,last_name,email,branch_name,member_type,bio',
+            'Mr.,Jane,Doe,jane@example.com,Colombo,Regular,Short bio here',
+            'Ms,Sam,Lee,,Sydney,Associate,',
+        ])."\n";
+
+        return response($csv)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', 'attachment; filename="members_template.csv"');
+    }
+
+
+    public function import()
+    {
+        $this->validate([
+            'importFile' => ['required','file','mimes:csv,txt','max:51200'],
+            'dryRun'     => ['boolean'],
+        ]);
+
+        $this->report = ['total'=>0,'valid'=>0,'created'=>0,'skipped'=>0,'errors'=>[]];
+        $this->progress = 0;
+
+        $real = $this->importFile->getRealPath();
+        if (!$real || !is_readable($real)) {
+            $this->report['errors'][] = ['row'=>1, 'message'=>'Unable to read uploaded file (temp file not readable)'];
+            $this->progress = 100;
+            return;
+        }
+
+        [$rows, $headers] = $this->readCsvFromPath($real);
+
+        $required = ['title','first_name','last_name'];
+        if (!$this->hasRequiredHeaders($headers, $required)) {
+            $this->report['errors'][] = [
+                'row'=>1,
+                'message'=>'Invalid headers. Expected: '.implode(',', $required),
+            ];
+            $this->progress = 100;
+            return;
+        }
+
+        $this->report['total'] = count($rows);
+
+        $existingNames = Member::query()
+            ->select('first_name','last_name')
+            ->get()
+            ->map(fn($m) => strtolower(trim($m->first_name)).'|'.strtolower(trim($m->last_name)))
+            ->all();
+        $existingNameSet = array_flip($existingNames);
+        $seenNewNames = [];
+        $toInsert = [];
+        $rowNum = 1;
+        foreach ($rows as $r) {
+            $rowNum++;
+            $data = $this->mapRowToMember($r);
+            $errs = $this->validateRow($data, $existingEmails);
+            if ($errs) {
+                $this->report['errors'][] = ['row'=>$rowNum, 'message'=>implode('; ', $errs)];
+                $this->report['skipped']++;
+                continue;
+            }
+
+            $key = strtolower(trim($data['first_name'] ?? '')) . '|' . strtolower(trim($data['last_name'] ?? ''));
+
+            if (isset($existingNameSet[$key])) {
+                $this->report['errors'][] = ['row'=>$rowNum, 'message'=>'first_name + last_name already exists'];
+                $this->report['skipped']++;
+                continue;
+            }
+
+            if (isset($seenNewNames[$key])) {
+                $this->report['errors'][] = ['row'=>$rowNum, 'message'=>'Duplicate full name in this CSV'];
+                $this->report['skipped']++;
+                continue;
+            }
+            $seenNewNames[$key] = true;
+            $this->report['valid']++;
+
+            if (!$this->dryRun) {
+                $toInsert[] = $this->prepareForInsert($data);
+                if ($data['email']) $existingEmails[] = $data['email'];
+            }
+        }
+
+        if (!$this->dryRun && $toInsert) {
+            $total = count($toInsert);
+            $done  = 0;
+
+            foreach (array_chunk($toInsert, 500) as $chunk) {
+                DB::transaction(fn() => Member::insert($chunk));
+                $done += count($chunk);
+                $this->report['created'] += count($chunk);
+                $this->progress = (int) floor(($done / $total) * 100);
+            }
+        }
+
+        $this->progress = 100;
+
+        session()->flash(
+            'ok',
+            $this->dryRun
+                ? "Dry-run complete: {$this->report['valid']} valid, {$this->report['skipped']} with errors."
+                : "Import complete: created {$this->report['created']}, skipped {$this->report['skipped']}."
+        );
+    }
+
+    private function readCsvFromPath(string $path): array
+    {
+        $fh = fopen($path, 'r');
+        if (!$fh) return [[], []];
+
+        $headers = fgetcsv($fh, 0, ',');
+        if (!$headers) { fclose($fh); return [[], []]; }
+
+        $headers = array_map(fn($h) => strtolower(trim((string)$h)), $headers);
+
+        $rows = [];
+        while (($row = fgetcsv($fh, 0, ',')) !== false) {
+            if (count($row) === 1 && trim(implode('', $row)) === '') continue;
+            $assoc = [];
+            foreach ($headers as $i => $h) {
+                $assoc[$h] = isset($row[$i]) ? trim((string) $row[$i]) : null;
+            }
+            $rows[] = $assoc;
+        }
+        fclose($fh);
+        return [$rows, $headers];
+    }
+
+    public function downloadErrors()
+    {
+        if (empty($this->report['errors'])) {
+            session()->flash('ok', 'No errors to download.');
+            return null;
+        }
+
+        $lines = ["row,message"];
+        foreach ($this->report['errors'] as $e) {
+            $msg = str_replace('"', '""', $e['message']);
+            $lines[] = "{$e['row']},\"{$msg}\"";
+        }
+        $csv = implode("\n", $lines) . "\n";
+
+        return response()->streamDownload(
+            fn() => print($csv),
+            'members_import_errors_'.now()->format('Ymd_His').'.csv',
+            ['Content-Type' => 'text/csv; charset=UTF-8']
+        );
+    }
+
+    private function readCsv(string $absPath): array
+    {
+        $fh = fopen($absPath, 'r');
+        if (!$fh) return [[], []];
+
+        $headers = fgetcsv($fh, 0, ',');
+        if (!$headers) return [[], []];
+
+        $headers = array_map(fn($h) => strtolower(trim((string)$h)), $headers);
+
+        $rows = [];
+        while (($row = fgetcsv($fh, 0, ',')) !== false) {
+            if (count($row) === 1 && trim(implode('', $row)) === '') continue;
+            $assoc = [];
+            foreach ($headers as $i => $h) {
+                $assoc[$h] = isset($row[$i]) ? trim((string) $row[$i]) : null;
+            }
+            $rows[] = $assoc;
+        }
+        fclose($fh);
+        return [$rows, $headers];
+    }
+
+    private function hasRequiredHeaders(array $headers, array $required): bool
+    {
+        $set = array_flip($headers);
+        foreach ($required as $r) {
+            if (!isset($set[$r])) return false;
+        }
+        return true;
+    }
+
+    private function mapRowToMember(array $row): array
+    {
+        return [
+            'title'       => $this->normalizeTitle($row['title']       ?? null),
+            'first_name'  => $row['first_name']                        ?? null,
+            'last_name'   => $row['last_name']                         ?? null,
+            'email'       => $row['email']                             ?? null,
+            'branch_name' => $row['branch_name']                       ?? null,
+            'member_type' => $row['member_type']                       ?? null,
+            'bio'         => $row['bio']                               ?? null,
+        ];
+    }
+
+    private function validateRow(array $d, array $existingEmails): array
+    {
+        $errs = [];
+
+        if ($d['title'] && !in_array($d['title'], ['Mr.','Mrs.','Miss','Ms'], true)) {
+            $errs[] = 'title must be one of: Mr., Mrs., Miss, Ms';
+        }
+        if (!$d['first_name'] || strlen($d['first_name']) < 2) $errs[] = 'first_name is required (min 2)';
+        if (!$d['last_name']  || strlen($d['last_name']) < 2)  $errs[] = 'last_name is required (min 2)';
+
+        if ($d['email']) {
+            if (!filter_var($d['email'], FILTER_VALIDATE_EMAIL)) {
+                $errs[] = 'email is invalid';
+            } elseif (in_array($d['email'], $existingEmails, true)) {
+                $errs[] = 'email already exists';
+            }
+        }
+
+        if ($d['branch_name'] && strlen($d['branch_name']) > 255) $errs[] = 'branch_name too long';
+        if ($d['member_type'] && strlen($d['member_type']) > 255) $errs[] = 'member_type too long';
+        if ($d['bio'] && strlen($d['bio']) > 2000)               $errs[] = 'bio too long';
+
+        return $errs;
+    }
+
+    private function prepareForInsert(array $d): array
+    {
+        return [
+            'title'       => $d['title'],
+            'first_name'  => $d['first_name'],
+            'last_name'   => $d['last_name'],
+            'email'       => $d['email'] ?: null,
+            'branch_name' => $d['branch_name'],
+            'member_type' => $d['member_type'],
+            'bio'         => $d['bio'],
+            'photo'       => null,
+            'name'        => trim(($d['first_name'] ?? '').' '.($d['last_name'] ?? '')),
+            'created_at'  => now(),
+            'updated_at'  => now(),
+        ];
+    }
+
+    private function normalizeTitle(?string $title): ?string
+    {
+        if (!$title) return null;
+        $t = trim($title);
+        $t = rtrim(ucfirst(strtolower($t)), '.');
+        return match ($t) {
+            'Mr'   => 'Mr.',
+            'Mrs'  => 'Mrs.',
+            'Miss' => 'Miss',
+            'Ms'   => 'Ms',
+            default => null,
+        };
     }
 
     protected function getPerPage(): int
