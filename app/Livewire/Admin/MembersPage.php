@@ -99,16 +99,21 @@ class MembersPage extends Component
 
     public function save(): void
     {
-        // Validate new fields
         $this->validate([
             'title'       => ['nullable','string','in:Mr.,Mrs.,Miss,Ms'],
-            'first_name'  => ['required','string','min:2','max:255'],
+            'first_name'  => [
+                'required','string','min:2','max:255',
+                Rule::unique('members', 'first_name')
+                    ->where(fn($q) => $q->where('last_name', $this->last_name)),
+            ],
             'last_name'   => ['required','string','min:2','max:255'],
             'branch_name' => ['nullable','string','max:255'],
             'member_type' => ['nullable','string','max:255'],
             'email'       => ['nullable','email','max:255','unique:members,email'],
             'bio'         => ['nullable','string','max:2000'],
             'photoUpload' => ['nullable','image','max:2048'],
+        ], [
+            'first_name.unique' => 'A member with this first and last name already exists.',
         ]);
 
         $photoPath = null;
@@ -173,7 +178,12 @@ class MembersPage extends Component
 
         $this->validate([
             'editTitle'      => ['nullable','string','in:Mr.,Mrs.,Miss,Ms'],
-            'editFirstName'  => ['required','string','min:2','max:255'],
+            'editFirstName'  => [
+                'required','string','min:2','max:255',
+                Rule::unique('members', 'first_name')
+                    ->ignore($this->editingId)
+                    ->where(fn($q) => $q->where('last_name', $this->editLastName)),
+            ],
             'editLastName'   => ['required','string','min:2','max:255'],
             'editBranchName' => ['nullable','string','max:255'],
             'editMemberType' => ['nullable','string','max:255'],
@@ -183,14 +193,14 @@ class MembersPage extends Component
             ],
             'editBio'        => ['nullable','string','max:2000'],
             'editPhotoUpload'=> ['nullable','image','max:2048'],
+        ], [
+            'editFirstName.unique' => 'A member with this first and last name already exists.',
         ]);
 
         $m = Member::findOrFail($this->editingId);
 
-        // Handle new photo upload (optional)
         if ($this->editPhotoUpload) {
             $newPath = $this->editPhotoUpload->store('members', 'public');
-            // Optionally delete old file
             if ($m->photo && Storage::disk('public')->exists($m->photo)) {
                 Storage::disk('public')->delete($m->photo);
             }
@@ -217,7 +227,6 @@ class MembersPage extends Component
     public function delete(int $id): void
     {
         $m = Member::findOrFail($id);
-        // optionally remove stored photo
         if ($m->photo && Storage::disk('public')->exists($m->photo)) {
             Storage::disk('public')->delete($m->photo);
         }
@@ -225,8 +234,6 @@ class MembersPage extends Component
 
         session()->flash('ok', 'Member deleted.');
     }
-
-    // ---------- Bulk Import actions ----------
 
     public function downloadTemplate()
     {
@@ -236,7 +243,6 @@ class MembersPage extends Component
             'Ms,Sam,Lee,,Sydney,Associate,',
         ])."\n";
 
-        // Stream the file directly, no need to check disk
         return response($csv)
             ->header('Content-Type', 'text/csv')
             ->header('Content-Disposition', 'attachment; filename="members_template.csv"');
@@ -250,11 +256,9 @@ class MembersPage extends Component
             'dryRun'     => ['boolean'],
         ]);
 
-        // Reset report
         $this->report = ['total'=>0,'valid'=>0,'created'=>0,'skipped'=>0,'errors'=>[]];
         $this->progress = 0;
 
-        // 👉 Read directly from Livewire temp file (no intermediate storage)
         $real = $this->importFile->getRealPath();
         if (!$real || !is_readable($real)) {
             $this->report['errors'][] = ['row'=>1, 'message'=>'Unable to read uploaded file (temp file not readable)'];
@@ -276,20 +280,18 @@ class MembersPage extends Component
 
         $this->report['total'] = count($rows);
 
-        // Preload existing emails for fast duplicate detection (email is optional)
-        $incomingEmails = array_values(array_filter(array_map(fn($r) => trim((string)($r['email'] ?? '')), $rows)));
-        $existingEmails = $incomingEmails
-            ? Member::query()->whereIn('email', $incomingEmails)->pluck('email')->all()
-            : [];
-
+        $existingNames = Member::query()
+            ->select('first_name','last_name')
+            ->get()
+            ->map(fn($m) => strtolower(trim($m->first_name)).'|'.strtolower(trim($m->last_name)))
+            ->all();
+        $existingNameSet = array_flip($existingNames);
+        $seenNewNames = [];
         $toInsert = [];
-        $rowNum = 1; // header row is 1; data lines start at 2
+        $rowNum = 1;
         foreach ($rows as $r) {
             $rowNum++;
-
             $data = $this->mapRowToMember($r);
-
-            // Validate row
             $errs = $this->validateRow($data, $existingEmails);
             if ($errs) {
                 $this->report['errors'][] = ['row'=>$rowNum, 'message'=>implode('; ', $errs)];
@@ -297,11 +299,25 @@ class MembersPage extends Component
                 continue;
             }
 
+            $key = strtolower(trim($data['first_name'] ?? '')) . '|' . strtolower(trim($data['last_name'] ?? ''));
+
+            if (isset($existingNameSet[$key])) {
+                $this->report['errors'][] = ['row'=>$rowNum, 'message'=>'first_name + last_name already exists'];
+                $this->report['skipped']++;
+                continue;
+            }
+
+            if (isset($seenNewNames[$key])) {
+                $this->report['errors'][] = ['row'=>$rowNum, 'message'=>'Duplicate full name in this CSV'];
+                $this->report['skipped']++;
+                continue;
+            }
+            $seenNewNames[$key] = true;
             $this->report['valid']++;
 
             if (!$this->dryRun) {
                 $toInsert[] = $this->prepareForInsert($data);
-                if ($data['email']) $existingEmails[] = $data['email']; // prevent dupes within same file
+                if ($data['email']) $existingEmails[] = $data['email'];
             }
         }
 
@@ -339,7 +355,7 @@ class MembersPage extends Component
 
         $rows = [];
         while (($row = fgetcsv($fh, 0, ',')) !== false) {
-            if (count($row) === 1 && trim(implode('', $row)) === '') continue; // skip empty lines
+            if (count($row) === 1 && trim(implode('', $row)) === '') continue;
             $assoc = [];
             foreach ($headers as $i => $h) {
                 $assoc[$h] = isset($row[$i]) ? trim((string) $row[$i]) : null;
@@ -371,9 +387,6 @@ class MembersPage extends Component
         );
     }
 
-    // ---------- Helpers ----------
-
-    /** @return array{0: array<int, array<string,string>>, 1: array<int,string>} */
     private function readCsv(string $absPath): array
     {
         $fh = fopen($absPath, 'r');
@@ -386,7 +399,7 @@ class MembersPage extends Component
 
         $rows = [];
         while (($row = fgetcsv($fh, 0, ',')) !== false) {
-            if (count($row) === 1 && trim(implode('', $row)) === '') continue; // skip empty line
+            if (count($row) === 1 && trim(implode('', $row)) === '') continue;
             $assoc = [];
             foreach ($headers as $i => $h) {
                 $assoc[$h] = isset($row[$i]) ? trim((string) $row[$i]) : null;
@@ -406,7 +419,6 @@ class MembersPage extends Component
         return true;
     }
 
-    /** Normalize + map CSV row to Member attributes */
     private function mapRowToMember(array $row): array
     {
         return [
@@ -415,13 +427,11 @@ class MembersPage extends Component
             'last_name'   => $row['last_name']                         ?? null,
             'email'       => $row['email']                             ?? null,
             'branch_name' => $row['branch_name']                       ?? null,
-            'member_type' => $row['member_type']                       ?? null, // <- now safe if missing
+            'member_type' => $row['member_type']                       ?? null,
             'bio'         => $row['bio']                               ?? null,
         ];
     }
 
-
-    /** Return array of error strings */
     private function validateRow(array $d, array $existingEmails): array
     {
         $errs = [];
@@ -457,8 +467,8 @@ class MembersPage extends Component
             'branch_name' => $d['branch_name'],
             'member_type' => $d['member_type'],
             'bio'         => $d['bio'],
-            'photo'       => null, // not handled via CSV
-            'name'        => trim(($d['first_name'] ?? '').' '.($d['last_name'] ?? '')), // legacy
+            'photo'       => null,
+            'name'        => trim(($d['first_name'] ?? '').' '.($d['last_name'] ?? '')),
             'created_at'  => now(),
             'updated_at'  => now(),
         ];
@@ -468,14 +478,13 @@ class MembersPage extends Component
     {
         if (!$title) return null;
         $t = trim($title);
-        // Standardize common variants (e.g., "mr", "MR", "mr.")
         $t = rtrim(ucfirst(strtolower($t)), '.');
         return match ($t) {
             'Mr'   => 'Mr.',
             'Mrs'  => 'Mrs.',
             'Miss' => 'Miss',
             'Ms'   => 'Ms',
-            default => null, // invalid becomes null; validator will flag if present
+            default => null,
         };
     }
 

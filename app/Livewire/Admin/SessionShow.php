@@ -22,32 +22,21 @@ class SessionShow extends Component
 {
     use WithPagination;
     use WithFileUploads;
-
     public Conference $conference;
     public VotingSession $session;
-
-    /** Candidates & votes (display) */
-    public array $candidatesWithVotes = [];     // [ ['id','name','member_id','votes_count','percent'], ... ]
-    public array $candidateMemberIds  = [];     // member_ids already candidates for the session position
-
-    /** Plurality snapshot (kept for compatibility) */
-    public array $winner = ['max' => 0, 'ids' => []]; // highest vote count & candidate ids with that count
-
-    /** Majority snapshot */
+    public array $candidatesWithVotes = [];
+    public array $candidateMemberIds  = [];
+    public array $winner = ['max' => 0, 'ids' => []];
     public int   $totalVotes       = 0;
     public float $thresholdPercent = 50.0;
     public float $thresholdVotes   = 0.0;
     public bool  $hasMajority      = false;
     public float $majorityPercent  = 0.0;
     public array $majorityWinners  = [];
-
     public array $assigned  = [];
     public array $justIssued = []; 
-
     protected string $pageName = 'membersPage';
-
     public ?int $pickMemberId = null;
-
     public bool $showEditModal = false;
     public ?int $editCandidateId = null;
     public string $editName = '';
@@ -55,7 +44,6 @@ class SessionShow extends Component
     public ?string $editPhotoUrl = null;
     public ?\Livewire\Features\SupportFileUploads\TemporaryUploadedFile $editPhoto = null; 
     public int $numWinners = 0;
-
     public array $revealed = []; 
 
     public function revealCode(int $memberId): void
@@ -72,28 +60,23 @@ class SessionShow extends Component
 
     public function mount(Conference $conference, VotingSession $session): void
     {
-        // Ensure the session belongs to this conference
         abort_unless($session->conference_id === $conference->id, 404);
         $this->conference = $conference;
         $this->session    = $session->load('position');
     }
 
-    /** Clear one-time codes when paging members */
     public function updatedMembersPage(): void
     {
         $this->reset(['justIssued','revealed']);
     }
 
-    /** Open session */
     public function openSession(): void
     {
         $role = optional(auth()->user())->role;
             if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
                 DB::transaction(function () {
-            // Lock all sessions in this conference to avoid races
             VotingSession::where('conference_id', $this->conference->id)->lockForUpdate()->get();
 
-            // Is there another open session in this conference?
             $otherOpen = VotingSession::where('conference_id', $this->conference->id)
                 ->where('id', '!=', $this->session->id)
                 ->where('status', 'Open')
@@ -118,7 +101,6 @@ class SessionShow extends Component
         $this->session->refresh();
     }
 
-    /** End session */
     public function endSession(): void
     {
         $role = optional(auth()->user())->role;
@@ -134,7 +116,6 @@ class SessionShow extends Component
         $this->session->refresh();
     }
 
-    /** Assign / unassign a member to this session (issue / revoke code) */
     public function toggleMember(int $memberId, bool $checked): void
     {
         $role = optional(auth()->user())->role;
@@ -145,7 +126,6 @@ class SessionShow extends Component
             return;
         }
 
-        // Check assignment for THIS session (to satisfy NOT NULL voting_session_id)
         $existingCurrent = VoterId::where('voting_session_id', $this->session->id)
             ->where('member_id', $memberId)
             ->first();
@@ -204,7 +184,6 @@ class SessionShow extends Component
         $this->session->refresh();
     }
 
-    /** Add candidate via the select (validated & cast) */
     public function addCandidateFromSelect(): void
     {
         if (! $this->pickMemberId) {
@@ -220,15 +199,10 @@ class SessionShow extends Component
         }
 
         $this->addCandidateFromMember($memberId);
-
-        // Refresh candidate panel immediately so the dropdown updates
         $this->rebuildCandidatesPanel();
-
-        // Reset the select
         $this->pickMemberId = null;
     }
 
-    /** Core add-candidate logic */
     public function addCandidateFromMember(int $memberId): void
     {
         $role = optional(auth()->user())->role;
@@ -236,7 +210,6 @@ class SessionShow extends Component
         if (! $this->session->position_id) { $this->addError('candidates','This session has no position assigned.'); return; }
         if ($this->session->status === 'Closed') { $this->addError('candidates','This session is closed.'); return; }
 
-        // 1) Is there already a Candidate row for this position+member?
         $candidate = \App\Models\Candidate::where('position_id', $this->session->position_id)
             ->where('member_id', $memberId)
             ->first();
@@ -254,7 +227,6 @@ class SessionShow extends Component
             ]);
         }
 
-        // 2) Attach candidate to THIS session if not already
         if (! $this->session->sessionCandidates()->whereKey($candidate->id)->exists()) {
             $this->session->sessionCandidates()->attach($candidate->id);
             session()->flash('ok', 'Candidate added to this session.');
@@ -263,14 +235,9 @@ class SessionShow extends Component
         }
 
         $this->session->refresh();
-        $this->rebuildCandidatesPanel(); // reflect immediately
+        $this->rebuildCandidatesPanel();
     }
 
-
-    /**
-     * Build the candidates + votes + (plurality & majority) snapshots
-     * and derive $candidateMemberIds for "not-yet-candidate" dropdown.
-     */
     protected function rebuildCandidatesPanel(): void
     {
         $posId = $this->session->position_id;
@@ -286,7 +253,7 @@ class SessionShow extends Component
             $this->hasMajority      = false;
             $this->majorityPercent  = 0.0;
             $this->majorityWinners  = [];
-            $this->numWinners       = 0;                 // ← add this
+            $this->numWinners       = 0;
             return;
         }
 
@@ -344,8 +311,6 @@ class SessionShow extends Component
         $this->candidatesWithVotes = $rows;
 
         $this->candidateMemberIds = $cands->pluck('member_id')->filter()->values()->all();
-
-        // Plurality winner(s)
         $maxVotes = empty($rows) ? 0 : max(array_column($rows, 'votes_count'));
         $this->winner = [
             'max' => (int) $maxVotes,
@@ -353,9 +318,7 @@ class SessionShow extends Component
                 ? array_column(array_filter($rows, fn($r) => $r['votes_count'] === $maxVotes), 'id')
                 : [],
         ];
-        $this->numWinners = count($this->winner['ids']); // ← add this
-
-        // Majority (only if threshold set)
+        $this->numWinners = count($this->winner['ids']);
         $this->hasMajority     = false;
         $this->majorityPercent = 0.0;
         $this->majorityWinners = [];
@@ -392,14 +355,10 @@ class SessionShow extends Component
     public function render()
     {
         $this->autoCloseIfDue();
-        // Keep candidates snapshot in sync every render
         $this->rebuildCandidatesPanel();
-
-        // Members table (paginated)
         $members = Member::orderBy('name')
             ->paginate(15, ['*'], $this->pageName);
 
-        // Assigned map [member_id => voter_id]
         $this->assigned = VoterId::where('voting_session_id', $this->session->id)
             ->pluck('id', 'member_id')
             ->all();
@@ -447,8 +406,6 @@ class SessionShow extends Component
         if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
 
         $candidate = Candidate::with('member')->findOrFail($candidateId);
-
-        // Optional: forbid edits if session is closed
         if ($this->session->status === 'Closed') {
             $this->addError('candidates', 'This session is closed.');
             return;
@@ -460,7 +417,7 @@ class SessionShow extends Component
         $this->editPhotoUrl    = $candidate->photo_url;
         $this->editPhoto       = null;
 
-        $this->resetValidation(); // clear old validation errors
+        $this->resetValidation();
         $this->showEditModal = true;
     }
 
@@ -468,10 +425,7 @@ class SessionShow extends Component
     {
         $role = optional(auth()->user())->role;
         if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
-
         if (! $this->editCandidateId) return;
-
-        // Optional: forbid edits if session is closed
         if ($this->session->status === 'Closed') {
             $this->addError('candidates', 'This session is closed.');
             return;
@@ -480,30 +434,21 @@ class SessionShow extends Component
         $data = $this->validateEdit();
 
         $candidate = Candidate::findOrFail($this->editCandidateId);
-
-        // Handle file upload if a new photo was provided
         if ($this->editPhoto) {
-            // If the candidate already has a locally stored file, delete it
             if ($candidate->photo_url && !str_starts_with($candidate->photo_url, 'http')) {
                 Storage::disk('public')->delete($candidate->photo_url);
             }
 
-            // Save new file into storage/app/public/candidates
             $path = $this->editPhoto->store('candidates', 'public');
-
-            // Save the relative path in DB (recommended)
             $candidate->photo_url = $path;
         } elseif (isset($data['editPhotoUrl'])) {
-            // If no file uploaded but URL provided
             $candidate->photo_url = $data['editPhotoUrl'] ?: $candidate->photo_url;
         }
 
-        // Update the rest
         $candidate->name = $data['editName'];
         $candidate->bio  = $data['editBio'] ?? null;
         $candidate->save();
 
-        // Refresh panels
         $this->rebuildCandidatesPanel();
         $this->session->refresh();
 
@@ -521,7 +466,6 @@ class SessionShow extends Component
 
     protected function autoCloseIfDue(): void
     {
-        // Only for Open + Timer sessions with a set start_time and minutes
         if (
             $this->session->status === 'Open'
             && $this->session->close_condition === 'Timer'
@@ -533,7 +477,6 @@ class SessionShow extends Component
 
             if (now()->greaterThanOrEqualTo($deadline)) {
                 DB::transaction(function () {
-                    // Double-check under lock to avoid races if multiple tabs are open
                     $s = \App\Models\VotingSession::whereKey($this->session->id)
                         ->lockForUpdate()
                         ->first();
@@ -551,4 +494,35 @@ class SessionShow extends Component
             }
         }
     }
+
+    public function removeCandidate(int $candidateId): void
+    {
+        $role = optional(auth()->user())->role;
+        if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) abort(403);
+        if ($this->session->status === 'Closed') {
+            $this->addError('candidates', 'This session is closed.');
+            return;
+        }
+        $attached = $this->session->sessionCandidates()->whereKey($candidateId)->exists();
+        if (! $attached) {
+            session()->flash('ok', 'Candidate is not attached to this session.');
+            return;
+        }
+
+        $hasVotes = \DB::table('ballots')
+            ->where('voting_session_id', $this->session->id)
+            ->where('candidate_id', $candidateId)
+            ->exists();
+
+        if ($hasVotes) {
+            $this->addError('candidates', 'Cannot remove: this candidate already has votes in this session.');
+            return;
+        }
+        $this->session->sessionCandidates()->detach($candidateId);
+        $this->session->refresh();
+        $this->rebuildCandidatesPanel();
+        session()->flash('ok', 'Candidate removed from this session.');
+    }
+
+
 }

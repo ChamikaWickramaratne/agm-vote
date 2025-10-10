@@ -26,7 +26,6 @@
             </div>
         </div>
 
-        {{-- Actions --}}
         <div class="mt-4 flex flex-col sm:flex-row gap-3">
             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                 @if (is_null($conference->end_date))
@@ -39,7 +38,6 @@
                 @endif
             </x-role>
 
-            {{-- Public link for admins to copy/share --}}
             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                 <div class="flex items-center space-x-2">
                     <a href="{{ route('public.conference', $conference->public_token) }}"
@@ -53,14 +51,12 @@
         </div>
     </div>
 
-    {{-- QR code card --}}
     <div
         x-data="qrTools()"
         class="bg-white shadow sm:rounded-lg p-6 mt-6 flex flex-col items-center">
 
         <h3 class="font-semibold mb-3">QR Code for Voters</h3>
 
-        {{-- Clickable QR preview --}}
         <div class="cursor-pointer" @click="open = true" x-ref="qrSmallWrap">
             {!! QrCode::format('svg')->size(200)->margin(1)
                 ->generate(route('public.conference', $conference->public_token)) !!}
@@ -68,13 +64,11 @@
         <div class="text-xs text-gray-500 mt-2">Click QR to enlarge</div>
 
         <div class="mt-3 flex items-center gap-2">
-            {{-- keep your SVG download --}}
             <a
                 href="{{ route('admin.conferences.qr.download', ['conference' => $conference->id, 'format' => 'svg', 'size' => 1000, 'margin' => 1]) }}"
                 class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300"
             >Download SVG</a>
 
-            {{-- new client-side PNG export (no Imagick) --}}
             <button
                 type="button"
                 class="px-3 py-2 rounded bg-gray-200 hover:bg-gray-300"
@@ -82,7 +76,6 @@
             >Download PNG</button>
         </div>
 
-        {{-- Fullscreen modal with large QR --}}
         <div x-show="open" x-transition
             class="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
             @click.self="open = false">
@@ -113,7 +106,6 @@
     <div class="bg-white shadow sm:rounded-lg p-6 space-y-6">
         <h3 class="font-semibold">Voting Sessions</h3>
 
-        {{-- Create form only while conference is open --}}
         @if (is_null($conference->end_date))
             <x-role :roles="['SuperAdmin','Admin','VotingManager']">
                 <form wire:submit.prevent="createSession" class="grid gap-4 sm:grid-cols-3">
@@ -205,7 +197,6 @@
             <table class="min-w-full text-sm">
                 <thead>
                     <tr class="text-left border-b">
-                        <th class="py-2 pr-4">ID</th>
                         <th class="py-2 pr-4">Position</th>
                         <th class="py-2 pr-4">Status</th>
                         <th class="py-2 pr-4">Start</th>
@@ -216,12 +207,6 @@
                 <tbody>
                 @forelse($conference->sessions as $s)
                     <tr class="border-b">
-                        <td class="py-2 pr-4">
-                            <a class="text-indigo-600 hover:underline"
-                               href="{{ route('system.sessions.show', [$conference, $s]) }}">
-                                {{ $s->id }}
-                            </a>
-                        </td>
                         <td class="py-2 pr-4">{{ optional($s->position)->name ?? '—' }}</td>
                         <td class="py-2 pr-4">{{ $s->status }}</td>
                         <td class="py-2 pr-4">{{ optional($s->start_time)->format('Y-m-d H:i') ?? '—' }}</td>
@@ -255,10 +240,11 @@
         </div>
     </div>
     
-    {{-- Conference-wide member assignment & codes --}}
-    @livewire('admin.conference-members', ['conference' => $conference], key('conf-members-'.$conference->id))
+    <div class="bg-white shadow sm:rounded-lg p-6 space-y-6">
+        @livewire('admin.conference-members', ['conference' => $conference], key('conf-members-'.$conference->id))
+    </div>
 
-    {{-- Create Position Modal (Livewire-controlled) --}}
+
     @if ($this->showPositionModal)
         <div class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center" x-data>
             <div class="bg-white w-full max-w-lg rounded-xl shadow p-6">
@@ -276,13 +262,6 @@
                         <textarea wire:model.defer="newPositionDescription" class="mt-1 w-full border rounded p-2" rows="3"></textarea>
                         @error('newPositionDescription') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
                     </div>
-
-                    {{-- If you actually use regions, show a select; otherwise remove this block --}}
-                    {{-- <div>
-                        <label class="block text-sm font-medium">Region (optional)</label>
-                        <input type="number" wire:model.defer="newPositionRegionId" class="mt-1 w-full border rounded p-2" placeholder="Region ID">
-                        @error('newPositionRegionId') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
-                    </div> --}}
                 </div>
 
                 <div class="mt-6 flex items-center justify-end gap-3">
@@ -317,27 +296,23 @@
             const svg = containerEl.querySelector('svg');
             if (!svg) return;
 
-            // Ensure xmlns (so serialization is valid)
             if (!svg.getAttribute('xmlns')) {
                 svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
             }
 
-            // Determine dimensions from width/height or viewBox
             let w = parseFloat(svg.getAttribute('width')) || (svg.viewBox?.baseVal?.width ?? 0);
             let h = parseFloat(svg.getAttribute('height')) || (svg.viewBox?.baseVal?.height ?? 0);
-            if (!w || !h) { w = 500; h = 500; } // sensible fallback
+            if (!w || !h) { w = 500; h = 500; }
 
             const exportW = Math.round(w * scale);
             const exportH = Math.round(h * scale);
 
-            // Serialize SVG
             const svgString = new XMLSerializer().serializeToString(svg);
             const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(svgBlob);
 
             const img = new Image();
             img.onload = () => {
-                // Draw onto canvas with white background (so PNG isn't transparent)
                 const canvas = document.createElement('canvas');
                 canvas.width = exportW;
                 canvas.height = exportH;

@@ -146,7 +146,6 @@
                           class="mt-1 w-full border border-[#FFD93D] rounded-lg p-2 focus:ring-2 focus:ring-[#FF9A00]"></textarea>
                 @error('bio') <div class="text-sm text-red-600 mt-1">{{ $message }}</div> @enderror
             </div>
-            <!-- Add under Bio, for example -->
             <div>
             <label class="block text-sm font-medium text-[#4F200D]">Photo</label>
             <input name="photoUpload" type="file" wire:model="photoUpload"
@@ -189,7 +188,7 @@
                 </thead>
                 <tbody class="divide-y divide-[#FFD93D]">
                 @forelse($members as $m)
-                    <tr class="hover:bg-[#FFF6D6] transition">
+                    <tr class="hover:bg-[#FFF6D6] transition" wire:key="member-{{ $m->id }}">
                         <td class="py-2 px-4">{{ $m->title }}</td>
                         <td class="py-2 px-4">{{ $m->first_name }}</td>
                         <td class="py-2 px-4">{{ $m->last_name }}</td>
@@ -201,20 +200,18 @@
                             @endif
                         </td>
                         <td class="py-2 px-4 space-x-2">
-                        <button dusk="edit-member"
-                                wire:click="startEdit({{ $m->id }})"
-                                class="px-3 py-1 rounded-lg bg-[#4F200D] text-white hover:bg-[#FF9A00] transition">
-                            ✏️ Edit
-                        </button>
+                            <button dusk="edit-member"
+                                    wire:click="startEdit({{ $m->id }})"
+                                    class="px-3 py-1 rounded-lg bg-[#4F200D] text-white hover:bg-[#FF9A00] transition">
+                                ✏️ Edit
+                            </button>
 
-                        <button dusk="delete-member"
-                                wire:click="delete({{ $m->id }})"
-                                onclick="return confirm('Delete this member?')"
-                                class="px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition">
-                            🗑️ Delete
-                        </button>
-
-
+                            <button dusk="delete-member"
+                                    wire:click="delete({{ $m->id }})"
+                                    onclick="return confirm('Delete this member?')"
+                                    class="px-3 py-1 rounded-lg bg-red-600 text-white hover:bg-red-700 transition">
+                                🗑️ Delete
+                            </button>
                         </td>
                     </tr>
                 @empty

@@ -8,6 +8,7 @@ use App\Models\Conference;
 use App\Models\Member;
 use App\Models\VotingSession;
 use App\Models\VoterId;
+use App\Support\VoteJwt;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -18,24 +19,16 @@ use Livewire\Component;
 #[Layout('layouts.public')]
 class VoteWizard extends Component
 {
-    // URL/state
     public Conference $conference;
-
-    /** @var 'list'|'gate'|'vote' */
     public string $step = 'list';
-
     #[Url(as: 'session')]
     public ?int $sessionId = null;
-
-    // Gate + Voting state
     public ?VotingSession $session = null;
     public string $code = '';
     public ?int $remaining_seconds = null;
-
-    // Candidate management
     public ?int $pickMemberId = null;
-    public ?int $choiceId = null;     // single-select
-    public array $choiceIds = [];     // multi-select
+    public ?int $choiceId = null;
+    public array $choiceIds = [];
     public ?string $customCandidateName = null;
 
     public function mount(string $token): void
@@ -50,9 +43,6 @@ class VoteWizard extends Component
             $ended = trim($conf->end_date) !== '' && trim($conf->end_date) !== '0000-00-00 00:00:00';
         }
 
-        // If you still want to block the public page when truly ended:
-        // if ($ended) abort(404);
-
         $this->conference = $conf->load(['sessions.position']);
 
         if ($this->sessionId) {
@@ -61,7 +51,6 @@ class VoteWizard extends Component
     }
 
 
-    /** Step 1 -> Step 2 */
     public function selectSession(int $id): void
     {
         $s = $this->conference->sessions()->where('id', $id)->first();
@@ -74,11 +63,9 @@ class VoteWizard extends Component
         $this->sessionId = $s->id;
         $this->step = 'gate';
 
-        // init timer banner state (used later in 'vote' step as well)
         $this->remaining_seconds = $this->calcRemaining($s);
     }
 
-    /** Step 2 -> Step 3 */
     public function verify(): void
     {
         $this->validate([
@@ -86,8 +73,6 @@ class VoteWizard extends Component
         ]);
 
         abort_unless($this->session, 404);
-
-        // Look up all conference-level codes and match by hash
         $rows = VoterId::where('conference_id', $this->conference->id)->get(['id','voter_code_hash']);
 
         $match = null;
@@ -103,28 +88,31 @@ class VoteWizard extends Component
             return;
         }
 
-        // Gate access for just *this* session using the matched conference-level code row
         session()->put("voter_access.session_{$this->session->id}", $match->id);
-
 
         if (!$match) {
             $this->addError('code', 'Invalid or already used code.');
             return;
         }
 
-        // mark access for this component instance
         session()->put("voter_access.session_{$this->session->id}", $match->id);
 
-        // Configure selection mode from rules
         $isMulti = (bool) (($this->session->voting_rules['multiSelect'] ?? false));
         $this->choiceId  = $isMulti ? null : $this->choiceId;
         $this->choiceIds = $isMulti ? [] : [];
+        $jwt = VoteJwt::issue([
+            'sub' => 'voter',
+            'sid' => $this->session->id,
+            'vch' => $match->voter_code_hash,
+            'cid' => $this->conference->id,
+        ], 15 * 60);
+
+        session()->put("vote_jwt.session_{$this->session->id}", $jwt);
 
         $this->step = 'vote';
         $this->remaining_seconds = $this->calcRemaining($this->session);
     }
 
-    /** Timer calc helper */
     private function calcRemaining(VotingSession $s): ?int
     {
         if ($s->close_condition === 'Timer' && $s->start_time && !$s->end_time && $s->close_after_minutes) {
@@ -134,30 +122,23 @@ class VoteWizard extends Component
         return null;
     }
 
-    /** Polling hook to keep state fresh on a single page */
     public function poll(): void
     {
-        // Always refresh conference (for session list)
         $this->conference->refresh();
         $this->conference->loadMissing(['sessions.position']);
 
         if ($this->session) {
             $this->session->refresh();
             $this->session->loadMissing('conference');
-
-            // Close or bounce if session closed
             if ($this->session->status !== 'Open' || $this->session->end_time) {
                 session()->flash('vote_error', 'This voting session has closed.');
                 $this->resetToList();
                 return;
             }
-
-            // Keep timer synced
             $this->remaining_seconds = $this->calcRemaining($this->session);
         }
     }
 
-    /** Back to step 1 safely */
     public function resetToList(): void
     {
         $this->step = 'list';
@@ -171,7 +152,6 @@ class VoteWizard extends Component
         $this->remaining_seconds = null;
     }
 
-    /** Candidate add (member) */
     public function addCandidate(): void
     {
         abort_unless($this->session, 404);
@@ -201,7 +181,6 @@ class VoteWizard extends Component
         session()->flash('ok', 'Candidate added.');
     }
 
-    /** Candidate add (custom) */
     public function addCustomCandidate(): void
     {
         abort_unless($this->session, 404);
@@ -235,7 +214,6 @@ class VoteWizard extends Component
         session()->flash('ok', 'Custom candidate added.');
     }
 
-    /** Cast vote (single or multi) */
     public function castVote(): void
     {
         abort_unless($this->session, 404);
@@ -253,16 +231,34 @@ class VoteWizard extends Component
             ]);
         }
 
-        // voter access still valid?
-        $voterRowId = session()->get("voter_access.session_{$this->session->id}");
-        if (!$voterRowId) {
-            session()->flash('vote_error', 'Your voter session expired. Please re-enter your voter code.');
+        $jwt = session()->get("vote_jwt.session_{$this->session->id}");
+        if (!$jwt) {
+            session()->flash('vote_error', 'Your voting token expired. Please re-enter your code.');
             $this->step = 'gate';
             return;
         }
-        $voter = VoterId::findOrFail($voterRowId);
 
-        // time window check (if timer)
+        try {
+            $claims = \App\Support\VoteJwt::verify($jwt);
+        } catch (\Throwable $e) {
+            session()->flash('vote_error', 'Your voting token is invalid or expired.');
+            $this->step = 'gate';
+            return;
+        }
+
+        if (($claims['sid'] ?? null) !== $this->session->id || ($claims['cid'] ?? null) !== $this->conference->id) {
+            session()->flash('vote_error', 'Voting token does not match this session.');
+            $this->step = 'gate';
+            return;
+        }
+
+        $voterCodeHash = $claims['vch'] ?? null;
+        if (!$voterCodeHash) {
+            session()->flash('vote_error', 'Voting token missing required claim.');
+            $this->step = 'gate';
+            return;
+        }
+
         if ($this->remaining_seconds !== null && $this->remaining_seconds <= 0) {
             $this->addError($isMulti ? 'choiceIds' : 'choiceId', 'This voting session has closed.');
             return;
@@ -279,16 +275,16 @@ class VoteWizard extends Component
                 return;
             }
 
-            DB::transaction(function () use ($voter, $validIds) {
-                Ballot::where('voting_session_id', $this->session->id)
-                    ->where('voter_code_hash', $voter->voter_code_hash)
+            \DB::transaction(function () use ($voterCodeHash, $validIds) {
+                \App\Models\Ballot::where('voting_session_id', $this->session->id)
+                    ->where('voter_code_hash', $voterCodeHash)
                     ->delete();
 
                 foreach ($validIds as $cid) {
-                    Ballot::create([
+                    \App\Models\Ballot::create([
                         'voting_session_id' => $this->session->id,
                         'candidate_id'      => $cid,
-                        'voter_code_hash'   => $voter->voter_code_hash,
+                        'voter_code_hash'   => $voterCodeHash,
                         'jti_hash'          => null,
                         'cast_at'           => now(),
                     ]);
@@ -299,32 +295,28 @@ class VoteWizard extends Component
                 ->where('candidates.id', $this->choiceId)
                 ->firstOrFail();
 
-            DB::transaction(function () use ($voter, $candidate) {
-                Ballot::where('voting_session_id', $this->session->id)
-                    ->where('voter_code_hash', $voter->voter_code_hash)
+            \DB::transaction(function () use ($voterCodeHash, $candidate) {
+                \App\Models\Ballot::where('voting_session_id', $this->session->id)
+                    ->where('voter_code_hash', $voterCodeHash)
                     ->delete();
 
-                Ballot::create([
+                \App\Models\Ballot::create([
                     'voting_session_id' => $this->session->id,
                     'candidate_id'      => $candidate->id,
-                    'voter_code_hash'   => $voter->voter_code_hash,
+                    'voter_code_hash'   => $voterCodeHash,
                     'jti_hash'          => null,
                     'cast_at'           => now(),
                 ]);
             });
         }
-
-        // clear access and thank
-        session()->forget("voter_access.session_{$this->session->id}");
+        session()->forget("vote_jwt.session_{$this->session->id}");
         session()->flash('ok', 'Your vote has been recorded. Thank you!');
-
-        // Return to list view (same page)
         $this->resetToList();
     }
 
+
     public function render()
     {
-        // Preload for current session step
         $candidates = collect();
         $availableMembers = collect();
         if ($this->session && $this->step === 'vote') {
@@ -339,8 +331,6 @@ class VoteWizard extends Component
                 ->orderBy('name')
                 ->get();
         }
-
-        // List of open sessions for step 'list'
         $openSessions = $this->conference->sessions->where('status', 'Open')->values();
 
         return view('livewire.public.vote-wizard', compact('openSessions','candidates','availableMembers'));

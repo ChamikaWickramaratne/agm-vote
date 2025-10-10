@@ -10,8 +10,7 @@ class ConferencesPanel extends Component
 {
     use WithPagination;
 
-    // Inline create form fields
-    public ?string $start_date = null;  // bound to <input type="datetime-local">
+    public ?string $start_date = null;
     public ?string $end_date   = null;
 
     public string $search = '';
@@ -28,7 +27,6 @@ class ConferencesPanel extends Component
 
     public function save(): void
     {
-        // (Optional) gate who can create; keep or remove as you like:
         $role = optional(auth()->user())->role;
         if (! in_array($role, ['SuperAdmin','Admin','VotingManager'], true)) {
             abort(403);
@@ -43,8 +41,6 @@ class ConferencesPanel extends Component
 
         $this->reset(['start_date','end_date']);
         session()->flash('ok', 'Conference created.');
-
-        // stay on same pagination page
     }
 
     public function render()
@@ -57,8 +53,8 @@ class ConferencesPanel extends Component
                     [$like, $like]
                 );
             })
-            ->orderByDesc('created_at')   // ✅ newest created conference first
-            ->orderByDesc('id');           // (optional) fallback if created_at is same
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
 
         $conferences = $q->paginate(12);
 

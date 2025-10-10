@@ -134,6 +134,16 @@
                                                 wire:click="startEditCandidate({{ $row['id'] }})">
                                             Edit
                                         </button>
+
+                                        @if ((int) $row['votes_count'] === 0)
+                                            <span class="mx-2 text-gray-300">|</span>
+                                            <button type="button"
+                                                    class="text-red-700 hover:underline"
+                                                    wire:click="removeCandidate({{ $row['id'] }})"
+                                                    onclick="return confirm('Remove this candidate from the session?')">
+                                                Remove
+                                            </button>
+                                        @endif
                                     @endif
                                 </x-role>
                             </td>
